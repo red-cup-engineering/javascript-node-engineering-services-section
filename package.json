@@ -35,7 +35,11 @@
     "./audit-hull-kernel": "./scripts/audit-hull-kernel.mjs",
     "./syntax": "./src/syntax.mjs",
     "./javascript-parser": "./src/javascript-parser.mjs",
-    "./module-closure": "./src/module-closure.mjs"
+    "./module-closure": "./src/module-closure.mjs",
+    "./execute-javascript-program": {
+      "workerd": "./src/execute-javascript-program.workerd.mjs",
+      "default": "./src/module-closure.mjs"
+    }
   },
   "bin": {
     "run-javascript-node-operation-module": "./scripts/run-javascript-node-operation-module.mjs"

@@ -1,0 +1,77 @@
+{
+  "type": "HouseArchitectureNorms",
+  "version": 1,
+  "ruledOn": "2026-09-21",
+  "source": [
+    "Do more to orchestrate your agents, especially toward more architectured/systemitized code, better durable tooling for doing what they're working on",
+    "if you start to understand the software as essentially stratified layers of API, with the internal hull being the pure transformation functions and the external kernel being the effectful ones [...] you will do more good work to condense our codebase into a maintainable size and shape"
+  ],
+  "norms": [
+    {
+      "id": "layer-allow-list",
+      "statement": "Every import edge stays inside the house's layered DAG (data/records/house-layers.json): the target layer must be named in the source layer's own `imports` allow-list, or be the source layer itself, rather than merely sitting at or below some numeric rank.",
+      "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-node-services-section/scripts/audit-layer-imports.mjs#auditLayerImports",
+      "kind": "layer-import-violation"
+    },
+    {
+      "id": "no-phantom-imports",
+      "statement": "A house-scoped specifier names an existing house package and a subpath that package's own `exports` (or, lacking `exports`, the file itself) actually resolves; a relative specifier resolves to a real file on disk.",
+      "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-node-services-section/scripts/audit-phantom-imports.mjs#auditPhantomImports",
+      "kind": "phantom-import"
+    },
+    {
+      "id": "no-external-dependencies",
+      "statement": "An import is a Node builtin, a relative path, or a house scope -- never a third-party package; a house scope owns a capability instead of merely passing an external one through.",
+      "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-node-services-section/scripts/audit-external-imports.mjs#auditExternalImports",
+      "kind": "external-import"
+    },
+    {
+      "id": "no-typescript",
+      "statement": "House source is plain Node: a .ts/.mts/.cts file that is not a .d.* declaration is a deviation from standard package shape, and (for a change under gate) an offense on its own. Plain Node only, no TypeScript, node:test for tests.",
+      "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-normalization-services-section/scripts/review-jsnode-package.mjs#typescriptSourceDeviations",
+      "kind": "typescript-source"
+    },
+    {
+      "id": "hull-never-imports-kernel",
+      "statement": "The internal hull is the pure transformation functions and the external kernel is the effectful ones; a hull module may not reach a kernel module by a relative import, because doing so makes its own purity depend on that effect. A module classifies kernel only by a direct effect marker in its own text (an effectful import, a process stream read, fetch(, Date.now(/new Date(), Math.random(, or a named node:crypto randomness call) -- never by what it composes -- so this finding fires only for a direct hull-to-kernel relative import; the census's `reaches` (shortest relative-import hop count to a kernel module, within the module's own package) and the informational `hullReachingKernel` count (hull modules with reaches >= 2) report a module's transitive distance from an effect without moving the norm.",
+      "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-node-services-section/scripts/audit-hull-kernel.mjs#auditHullKernel",
+      "kind": "hull-imports-kernel"
+    },
+    {
+      "id": "no-barrels",
+      "statement": "A module earns its place by defining something; one whose statements are all `export * from` or `export {...} from` forwards without transforming and should be condensed away or folded into its consumer.",
+      "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-normalization-services-section/scripts/review-jsnode-package.mjs#barrelDeviation",
+      "kind": "barrel"
+    },
+    {
+      "id": "no-dist",
+      "statement": "A package ships its source, not a compiled twin: a checked-in dist/ directory beside the manifest is a deviation.",
+      "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-normalization-services-section/scripts/review-jsnode-package.mjs#distPresentDeviation",
+      "kind": "dist-present"
+    },
+    {
+      "id": "no-lockfiles",
+      "statement": "One codebase, no per-package node_modules and no package-lock.json, pnpm-lock.yaml, or yarn.lock checked in beside the manifest.",
+      "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-normalization-services-section/scripts/review-jsnode-package.mjs#lockfilePresentDeviations",
+      "kind": "lockfile-present"
+    },
+    {
+      "id": "exports-resolve",
+      "statement": "Every exact (non-`*`) target named in a package.json `exports` map resolves to a file that actually exists on disk.",
+      "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-normalization-services-section/scripts/review-jsnode-package.mjs#exportTargetMissingDeviations",
+      "kind": "export-target-missing"
+    },
+    {
+      "id": "house-dependencies-declared-and-used",
+      "statement": "A house-scoped package imported under a package's own src/scripts is declared in its `dependencies`, and every house-scoped `dependencies` entry is actually imported somewhere in the package; the manifest's stated dependency closure and the code's real one match in both directions.",
+      "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-normalization-services-section/scripts/review-jsnode-package.mjs",
+      "kind": ["house-dependency-undeclared", "house-dependency-unused"]
+    },
+    {
+      "id": "one-implementation-per-capability",
+      "statement": "Condensing the codebase into a maintainable size and shape means one implementation per capability across the house, not a SignCell-and-a-SignChain-and-a-SignGraph plurality of near-duplicates for the same job; no tool yet audits this.",
+      "audit": "unaudited",
+      "kind": "unaudited"
+    }
+  ]
+}

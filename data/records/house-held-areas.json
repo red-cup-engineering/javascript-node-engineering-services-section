@@ -1,0 +1,33 @@
+{
+  "type": "HouseHeldAreas",
+  "version": 1,
+  "ruledOn": "2026-09-21",
+  "areas": [
+    { "pattern": "eavt-services-section", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "seavt-services-section", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "json-services-section(?!/services/json-schema-services-section)", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "jsonl-services-section", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "witness-journal-services-section", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "energy-exchange", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "(^|/)hive-", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "computer-ledger-system-services-section", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "jsnode-workspace-analysis-services-section", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "ops-gateway-service", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "public-web-games", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "jsnode-engineering-cli", "holder": "codex", "reason": "another session's uncommitted work", "since": "2026-09-21" },
+    { "pattern": "personal-health-pacing-computer-systems-engineering-services-section", "holder": "other-hand", "reason": "staged or untracked work by another writer", "since": "2026-09-21" },
+    { "pattern": "semantic-site", "holder": "other-hand", "reason": "staged or untracked work by another writer", "since": "2026-09-21" },
+    { "pattern": "filum\\.561\\.group", "holder": "other-hand", "reason": "staged or untracked work by another writer", "since": "2026-09-21" },
+    { "pattern": "horsetail", "holder": "other-hand", "reason": "staged or untracked work by another writer", "since": "2026-09-21" },
+    { "pattern": "kalshi-stake-path-service", "holder": "other-hand", "reason": "staged or untracked work by another writer", "since": "2026-09-21" },
+    { "pattern": "obsmetrologia-theorem-audit", "holder": "other-hand", "reason": "staged or untracked work by another writer", "since": "2026-09-21" },
+    { "pattern": "^dev/apps/agent-development(/|$)", "holder": "other-hand", "reason": "staged or untracked work by another writer", "since": "2026-09-21" },
+    { "pattern": "l-space\\.561\\.group", "holder": "founder", "reason": "the Founder's in-progress site; its untracked config is imported by tracked files", "since": "2026-09-22" }
+  ],
+  "reachInSections": [
+    "seavt-services-section",
+    "eavt-services-section",
+    "jsonl-services-section/services",
+    "json-services-section/src"
+  ]
+}

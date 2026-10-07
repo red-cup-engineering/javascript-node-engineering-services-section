@@ -1,0 +1,1 @@
+{"$schema":"https://json-schema.org/draft/2020-12/schema","description":"The same request, admitted.","title":"admitJavascriptNodeCommandExecutionRequestOutput","type":"object"}

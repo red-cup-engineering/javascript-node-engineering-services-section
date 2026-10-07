@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "red-cup-engineering/schema/characters/jsnode-engineer",
+  "title": "JSNode engineer character",
+  "description": "A computer code engineer character specialized to JSNode operations, packages, workspaces, and service-owned Node.js transformations.",
+  "allOf": [
+    {
+      "$ref": "../../../../../../../lib/agency/characters/computer-code-engineer.schema.json"
+    }
+  ],
+  "x-561-group-character": {
+    "id": "jsnode-engineer",
+    "owner": "@red-cup-engineering/javascript-node-services-section",
+    "operationRoots": [
+      "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-code-fabrication-services-section/services/javascript-node-code-fabrication-services-section/services/jsnode-package-services-section"
+    ]
+  }
+}

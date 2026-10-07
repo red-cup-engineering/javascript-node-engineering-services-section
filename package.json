@@ -1,0 +1,83 @@
+{
+  "name": "@red-cup-engineering/javascript-node-services-section",
+  "version": "0.3.0",
+  "type": "module",
+  "description": "Node.js execution of schema-bound operations and shared command transports.",
+  "exports": {
+    "./operation": "./src/operation.mjs",
+    "./invoke-typed-operation": "./src/invoke-typed-operation.mjs",
+    "./invoke-text-operation": "./src/invoke-text-operation.mjs",
+    "./invoke-markdown-typed-operation": "./src/invoke-markdown-typed-operation.mjs",
+    "./argv": {
+      "import": "./src/argv.mjs"
+    },
+    "./retry": {
+      "import": "./src/retry.mjs"
+    },
+    "./admit-javascript-node-command-execution-request": "./scripts/admit-javascript-node-command-execution-request.mjs",
+    "./audit-external-imports": "./scripts/audit-external-imports.mjs",
+    "./audit-node-builtin-imports": "./scripts/audit-node-builtin-imports.mjs",
+    "./audit-phantom-imports": "./scripts/audit-phantom-imports.mjs",
+    "./project-javascript-node-command-execution-receipt": "./scripts/project-javascript-node-command-execution-receipt.mjs",
+    "./isolate-javascript-node-command-execution-request": "./scripts/isolate-javascript-node-command-execution-request.mjs",
+    "./run-sandboxed-command": "./scripts/run-sandboxed-command.mjs",
+    "./screen-change-ledger": "./scripts/screen-change-ledger.mjs",
+    "./verify-change-ledger": "./scripts/verify-change-ledger.mjs",
+    "./run-javascript-node-operation-module": "./scripts/run-javascript-node-operation-module.mjs",
+    "./run-package-suites": "./scripts/run-package-suites.mjs",
+    "./gate-change-ledger": "./scripts/gate-change-ledger.mjs",
+    "./audit-layer-imports": "./scripts/audit-layer-imports.mjs",
+    "./ratchet-layer-imports": "./scripts/ratchet-layer-imports.mjs",
+    "./audit-formal-object-copies": "./scripts/audit-formal-object-copies.mjs",
+    "./finding-ratchet": "./src/finding-ratchet.mjs",
+    "./git-tree-at-ref": "./src/git-tree-at-ref.mjs",
+    "./discover-house-packages": "./src/discover-house-packages.mjs",
+    "./audit-hull-kernel": "./scripts/audit-hull-kernel.mjs",
+    "./syntax": "./src/syntax.mjs",
+    "./javascript-parser": "./src/javascript-parser.mjs",
+    "./module-closure": "./src/module-closure.mjs"
+  },
+  "bin": {
+    "run-javascript-node-operation-module": "./scripts/run-javascript-node-operation-module.mjs"
+  },
+  "files": [
+    "README.md",
+    "scripts/run-javascript-node-operation-module.mjs",
+    "scripts/register-house-resolver.mjs",
+    "src/*.mjs"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "check": "node --check src/*.mjs && node --check test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=24.2.0"
+  },
+  "dependencies": {
+    "@coesite-operations/enterprise-branding-services-section": "workspace:*",
+    "@red-cup-engineering/metrologic": "workspace:*",
+    "@red-cup-engineering/computer-data-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/computer-filepath-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/computer-networking-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/computer-text-content-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/execute-javascript-node-command-service": "workspace:*",
+    "@red-cup-engineering/file-services": "workspace:*",
+    "@red-cup-engineering/inspect-installed-npm-package-service": "workspace:*",
+    "@red-cup-engineering/javascript-file-import-services-section": "workspace:*",
+    "@red-cup-engineering/javascript-file-services-section": "workspace:*",
+    "@red-cup-engineering/json-services-section": "workspace:*",
+    "@red-cup-engineering/jsonl-services-section": "workspace:*",
+    "@red-cup-engineering/markdown-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/npm-package-services-section": "workspace:*",
+    "@red-cup-engineering/npm-registry-graph-services-section": "workspace:*",
+    "@red-cup-engineering/npm-registry-query-service": "workspace:*",
+    "@red-cup-engineering/npm-registry-read-service": "workspace:*",
+    "@red-cup-engineering/npm-registry-services-section": "workspace:*",
+    "@red-cup-engineering/npm-registry-snapshot-publication-service": "workspace:*",
+    "@red-cup-engineering/npm-registry-snapshot-services-section": "workspace:*",
+    "@red-cup-engineering/read-javascript-file-export-documentation-service": "workspace:*",
+    "@red-cup-engineering/semiotic-npm-registry-services-section": "workspace:*",
+    "@red-cup-engineering/computer-code-engineering-services-section": "workspace:*"
+  }
+}

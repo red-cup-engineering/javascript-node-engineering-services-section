@@ -42,9 +42,9 @@
   },
   "files": [
     "README.md",
-    "scripts/run-javascript-node-operation-module.mjs",
-    "scripts/register-house-resolver.mjs",
-    "src/*.mjs"
+    "src",
+    "scripts",
+    "data"
   ],
   "scripts": {
     "test": "node --test test/*.test.mjs",

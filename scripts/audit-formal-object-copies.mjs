@@ -14,7 +14,7 @@
 //   node audit-formal-object-copies.mjs --base <ref> --candidate <ref> [--root <repository>] [--summary]
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { readingFamilies } from "@red-cup-engineering/computer-data-engineering-services-section/four";
+import { readingFamilies } from "@red-cup-engineering/computer-data-services-section/four";
 import { isAuditedSource } from "./audit-layer-imports.mjs";
 import { argument } from "../src/argv.mjs";
 import { discoverHousePackages } from "../src/discover-house-packages.mjs";

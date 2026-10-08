@@ -236,10 +236,12 @@ export function captureModuleClosure(entry) {
       pending.push(resolved);
     }
   }
-  const body = freezeProgramme(JSON.parse(canonicalJson(JSON.parse(JSON.stringify({ kind: "javascript.module-closure.v1", entry: keyOf(start), modules })))));
+  // Convert the null-prototype capture maps to the ordinary JSON carrier.
+  // The receiver performs canonical admission and retains the programme graph.
+  const body = JSON.parse(JSON.stringify({ kind: "javascript.module-closure.v1", entry: keyOf(start), modules }));
   const id = byteAddress(Buffer.from(canonicalJson(body)));
   admitModuleClosure(id, body, origins);
-  return Object.freeze({ id, body });
+  return Object.freeze({ id, body: moduleClosureMaterial(id) });
 }
 
 /** Admit transported source material. Host origin paths are bindings, never code identity. */

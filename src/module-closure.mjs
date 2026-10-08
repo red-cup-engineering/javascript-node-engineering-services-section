@@ -236,10 +236,11 @@ export function captureModuleClosure(entry) {
       pending.push(resolved);
     }
   }
-  const body = freezeProgramme(JSON.parse(canonicalJson(JSON.parse(JSON.stringify({ kind: "javascript.module-closure.v1", entry: keyOf(start), modules })))));
+  // The source capture is plain data; the receiver performs canonical admission.
+  const body = { kind: "javascript.module-closure.v1", entry: keyOf(start), modules };
   const id = byteAddress(Buffer.from(canonicalJson(body)));
   admitModuleClosure(id, body, origins);
-  return Object.freeze({ id, body });
+  return Object.freeze({ id, body: moduleClosureMaterial(id) });
 }
 
 /** Admit transported source material. Host origin paths are bindings, never code identity. */

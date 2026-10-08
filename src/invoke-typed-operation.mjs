@@ -1,4 +1,4 @@
-import { admit } from "@red-cup-engineering/computer-data-engineering-services-section/type-system";
+import { admit } from "@red-cup-engineering/computer-data-services-section/type-system";
 import {
   TYPED_OPERATION_MESSAGE_VERSION,
   TYPED_OPERATION_REFUSAL_KIND,

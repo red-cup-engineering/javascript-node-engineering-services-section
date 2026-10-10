@@ -14,7 +14,7 @@ function fixture() {
     name: "@red-cup-engineering/fixture", type: "module", main: "./dist/src/index.js", types: "./dist/src/index.d.ts",
     exports: { ".": { types: "./dist/src/index.d.ts", default: "./dist/src/index.js" }, "./srs": "./dist/src/srs.js" },
     scripts: { build: "tsc -p tsconfig.json", test: "tsc -p tsconfig.json && node --test dist/src/*.test.js" },
-    devDependencies: { typescript: "^5.0.0", "@types/node": "^20.0.0" }, dependencies: { "@red-cup-engineering/file-services": "0.1.0" },
+    devDependencies: { typescript: "^5.0.0", "@types/node": "^20.0.0" }, dependencies: { "@red-cup-engineering/computer-file-engineering-services-section": "0.1.0" },
   }, null, 2));
   writeFileSync(join(root, "tsconfig.json"), "{}");
   writeFileSync(join(root, "src", "types.mts"), "export interface Card { id: string; due: number }\nexport type Grade = 1 | 2 | 3 | 4;\n");
@@ -81,7 +81,7 @@ test("translating a package yields runnable plain Node, deletes the TypeScript, 
   assert.equal(manifest.types, undefined);
   assert.deepEqual(manifest.exports, { ".": { default: "./src/index.mjs" }, "./srs": "./src/srs.mjs" });
   assert.equal(manifest.devDependencies, undefined);
-  assert.deepEqual(manifest.dependencies, { "@red-cup-engineering/file-services": "0.1.0" });
+  assert.deepEqual(manifest.dependencies, { "@red-cup-engineering/computer-file-engineering-services-section": "0.1.0" });
   assert.equal(manifest.scripts.build, undefined);
   assert.equal(manifest.scripts.test, "node --test \"**/*.test.mjs\"");
   for (const file of ["src/index.mjs", "src/srs.mjs", "src/types.mjs", "src/srs.test.mjs"]) execFileSync(process.execPath, ["--check", join(root, file)]);

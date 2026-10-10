@@ -2,7 +2,7 @@ import { readJavascriptFileExportDocumentation } from "@red-cup-engineering/read
 import { posix as path } from "node:path";
 import { lineColumnOf, parseJavaScript, walkJavaScript } from "./javascript-parser.mjs";
 import { applyExactSourceEdits } from "@red-cup-engineering/computer-code-engineering-services-section/exact-source-edits";
-import { sha256Digest, sha256Hex } from "@red-cup-engineering/cryptographic-data-service/integrity";
+import { sha256Digest, sha256Hex } from "@red-cup-engineering/cryptographic-computer-data-engineering-services-section/integrity";
 
 const OPERATION_SOURCE_PATH = /^(?:src|scripts)\/[a-z][a-z0-9-]*\.mjs$/u;
 

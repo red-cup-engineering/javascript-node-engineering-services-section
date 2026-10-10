@@ -58,30 +58,16 @@
     "node": ">=24.2.0"
   },
   "dependencies": {
-    "@coesite-operations/enterprise-branding-services-section": "workspace:*",
-    "@red-cup-engineering/metrologic": "workspace:*",
-    "@red-cup-engineering/computer-filepath-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/computer-networking-engineering-services-section": "workspace:*",
     "@red-cup-engineering/computer-text-content-engineering-services-section": "workspace:*",
     "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/execute-javascript-node-command-service": "workspace:*",
-    "@red-cup-engineering/file-services": "workspace:*",
-    "@red-cup-engineering/inspect-installed-npm-package-service": "workspace:*",
-    "@red-cup-engineering/javascript-file-import-services-section": "workspace:*",
-    "@red-cup-engineering/javascript-file-services-section": "workspace:*",
     "@red-cup-engineering/json-services-section": "workspace:*",
-    "@red-cup-engineering/jsonl-services-section": "workspace:*",
     "@red-cup-engineering/markdown-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/npm-package-services-section": "workspace:*",
-    "@red-cup-engineering/npm-registry-graph-services-section": "workspace:*",
-    "@red-cup-engineering/npm-registry-query-service": "workspace:*",
-    "@red-cup-engineering/npm-registry-read-service": "workspace:*",
-    "@red-cup-engineering/npm-registry-services-section": "workspace:*",
-    "@red-cup-engineering/npm-registry-snapshot-publication-service": "workspace:*",
-    "@red-cup-engineering/npm-registry-snapshot-services-section": "workspace:*",
     "@red-cup-engineering/read-javascript-file-export-documentation-service": "workspace:*",
-    "@red-cup-engineering/semiotic-npm-registry-services-section": "workspace:*",
     "@red-cup-engineering/computer-code-engineering-services-section": "workspace:*",
     "@red-cup-engineering/computer-data-engineering-services-section": "workspace:*"
+  },
+  "devDependencies": {
+    "@red-cup-engineering/jsonl-services-section": "workspace:*",
+    "@red-cup-engineering/metrologic": "workspace:*"
   }
 }

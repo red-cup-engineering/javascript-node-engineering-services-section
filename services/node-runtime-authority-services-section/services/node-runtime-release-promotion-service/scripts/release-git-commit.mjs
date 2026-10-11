@@ -22,7 +22,7 @@
 // the commit was composed) ends the release without promotion and without a refusal: the commit
 // was not refused, only overtaken.
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { constants, homedir } from "node:os";
 import { dirname, relative, resolve } from "node:path";
 import process from "node:process";
@@ -41,10 +41,17 @@ function option(name, fallback) {
 }
 
 const here = dirname(fileURLToPath(import.meta.url));
-// The tree this script ships in: a checkout, or a materialized release carrying its receipt.
+// A mounted section's checkout: its .git is a file naming a git directory inside its superproject's
+// modules. The tree it ships in is the superproject that mounts it, not the section alone.
+function isMountedCheckout(candidate) {
+  const marker = resolve(candidate, ".git");
+  try { return statSync(marker).isFile() && /\/modules\//u.test(readFileSync(marker, "utf8")); } catch { return false; }
+}
+// The tree this script ships in: a checkout (the outermost, through any mounts), or a materialized release
+// carrying its receipt.
 function treeRoot(directory) {
   for (let candidate = directory; ; candidate = dirname(candidate)) {
-    if (existsSync(resolve(candidate, ".git")) || existsSync(resolve(candidate, "release-receipt.json"))) return candidate;
+    if ((existsSync(resolve(candidate, ".git")) && !isMountedCheckout(candidate)) || existsSync(resolve(candidate, "release-receipt.json"))) return candidate;
     if (dirname(candidate) === candidate) throw new Error(`no checkout or release contains ${directory}`);
   }
 }
@@ -103,7 +110,8 @@ export async function releaseGitCommit({
   onStep = (message) => process.stderr.write(`${message}\n`),
 }) {
   if (!specPath && !specInCommit) throw new Error("specPath or specInCommit is required");
-  const repository = (await commandOutput("git", ["rev-parse", "--show-toplevel"], { cwd: repositoryPath ?? here })).trim();
+  // A spec names the repository it is kept in; a script mounted inside that repository is not it.
+  const repository = repositoryPath ? (await commandOutput("git", ["rev-parse", "--show-toplevel"], { cwd: repositoryPath })).trim() : treeRoot(specPath ? dirname(resolve(specPath)) : here);
   let commit = (await commandOutput("git", ["rev-parse", "--verify", `${commitRef}^{commit}`], { cwd: repository })).trim();
   const spec = JSON.parse(specInCommit
     ? await commandOutput("git", ["show", `${commit}:${specInCommit}`], { cwd: repository })

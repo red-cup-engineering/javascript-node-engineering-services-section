@@ -1,0 +1,34 @@
+{
+  "name": "@red-cup-engineering/execute-javascript-node-command-service",
+  "version": "0.3.0",
+  "description": "Executes one exact typed program request without a shell and returns its complete immutable receipt; also executes a request with this process's own stdio inherited by the child for a delegate that must hand its live stdin/stdout/stderr connection straight to another program.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "exports": {
+    ".": "./scripts/execute-javascript-node-command.mjs",
+    "./with-inherited-stdio": "./scripts/execute-javascript-node-command-with-inherited-stdio.mjs",
+    "./asynchronously": "./scripts/execute-javascript-node-command-asynchronously.mjs"
+  },
+  "bin": {
+    "execute-javascript-node-command": "./scripts/execute-javascript-node-command.mjs"
+  },
+  "files": [
+    "scripts",
+    "package.json",
+    "data/records/schema"
+  ],
+  "dependencies": {
+    "@red-cup-engineering/javascript-node-services-section": "workspace:*"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "pack:dry-run": "npm pack --dry-run --ignore-scripts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@red-cup-engineering/jsonl-services-section": "workspace:*"
+  }
+}

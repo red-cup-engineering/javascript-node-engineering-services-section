@@ -2,7 +2,7 @@
   "type": "HouseLayers",
   "version": 5,
   "ruledOn": "2026-09-21",
-  "source": "The Founder's 2026-09-21 ruling holds that pre-existing issues are indications that things need further repair, not a license to leave a rank-based audit's blind spots in place, and states the house's DAG of software in these exact words: \"we end up with a DAG of software: substrate->Sign(Cell|Chain|Graph|I-forget-the-fourth)->relationality->FeltOS; substrate->web-server; substrate->gui-server (tufte)\" and \"Something like FeltOS should use TUFTE for its web engine, TUFTE then uses the same computer-data and computer-networking that everything else does.\" This record replaces the numeric-rank stratification with that DAG directly: each layer's `imports` array names exactly the layers it may import, rather than everything at or below a numeric rank, so a server can no longer import the nine and TUFTE can no longer import the web server merely for sitting at the same or a lower rank. Faculty order is carried forward from the 2026-08-21 six engineering programs code register (six strict layers); Sign membership is carried forward from the 2026-09-04 specification SignCell, SignChain, SignGraph, and SignCraft (semiotic-computer-system-services-section) and the 2026-09-09 Founder direction that Semiotics is the engineering face and Obsmetrologia the mathematics face of the same systems. Version 3 (2026-10-03) derives the substrate's inner order from the house dependency order data -> code -> networking -> systems (code uses data; networking uses code and data): the substrate is three layers, data, code and networking, each importing only those beneath it, and Metrologic, the data layer's mathematics, lives in the data section's lib. Version 4 (2026-10-03) seats Sign by the 2026-09-22 seating note (engineering notes, \"Seating the Sign family\", restating the 2026-09-04 specification with seats): a predication cell is a data form, so SignCell is data; assembling the truth and knowledge orderings is composition of typed claims, so SignChain is code; organizing the bilattice as a Chu space, data carried between parties with demand transported back, is networking, so SignGraph is networking; SignCraft, where effects enter, is the systems face every layer above the substrate imports. Obsmetrologia's spine agrees: Mark is built from nothing and Utterance, Articulating and Predicating come before Positing's FOUR. The libraries stay under the four packages' sections (signcell in computer data engineering, signchain in computer code, signgraph in computer networking, signcraft in computer systems), where the Founder realized them on 2026-10-01 outside the departmental trees; this record assigns their directories to the layers. The root is the computer engineering section, so the four packages' sections (signcell in computer data engineering, signchain in computer code, signgraph in computer networking, signcraft in computer systems) is audited. Version 5 (2026-10-03, Lane 5, substrate conformance) seats the x402 section by what its code does, as version 4 does for the four packages' sections (signcell in computer data engineering, signchain in computer code, signgraph in computer networking, signcraft in computer systems): the protocol (payment requirements, facilitators, resource server, offers, admission, sign-in-with-x, the capability boundary, value settlement) is networking and stays under the networking section, while its apps, market, market observation, settlement derivation, Hive exit-tightness seller, HBD verification, exact-purchase service, receipt record and the tests of those compose chains, buckets, fleets, key custody, the system engine and the web and gui servers, so they are applications; the deepest matching directory wins, and the networking residue imports none of them.",
+  "source": "The Founder's 2026-09-21 ruling holds that pre-existing issues are indications that things need further repair, not a license to leave a rank-based audit's blind spots in place, and states the house's DAG of software in these exact words: \"we end up with a DAG of software: substrate->Sign(Cell|Chain|Graph|I-forget-the-fourth)->relationality->FeltOS; substrate->web-server; substrate->gui-server (tufte)\" and \"Something like FeltOS should use TUFTE for its web engine, TUFTE then uses the same computer-data and computer-networking that everything else does.\" This record replaces the numeric-rank stratification with that DAG directly: each layer's `imports` array names exactly the layers it may import, rather than everything at or below a numeric rank, so a server can no longer import the nine and TUFTE can no longer import the web server merely for sitting at the same or a lower rank. Faculty order is carried forward from the 2026-08-21 six engineering programs code register (six strict layers); Sign membership is carried forward from the 2026-09-04 specification SignCell, SignChain, SignGraph, and SignCraft (semiotic-computer-system-services-section) and the 2026-09-09 Founder direction that Semiotics is the engineering face and Obsmetrologia the mathematics face of the same systems. Version 3 (2026-10-03) derives the substrate's inner order from the house dependency order data -> code -> networking -> systems (code uses data; networking uses code and data): the substrate is three layers, data, code and networking, each importing only those beneath it, and Metrologic, the data layer's mathematics, lives in the data section's lib. Version 4 (2026-10-03) seats Sign by the 2026-09-22 seating note (engineering notes, \"Seating the Sign family\", restating the 2026-09-04 specification with seats): a predication cell is a data form, so SignCell is data; assembling the truth and knowledge orderings is composition of typed claims, so SignChain is code; organizing the bilattice as a Chu space, data carried between parties with demand transported back, is networking, so SignGraph is networking; SignCraft, where effects enter, is the systems face every layer above the substrate imports. Obsmetrologia's spine agrees: Mark is built from nothing and Utterance, Articulating and Predicating come before Positing's FOUR. The libraries stay under lib/signstuff, where the Founder realized them on 2026-10-01 outside the departmental trees; this record assigns their directories to the layers. The root is the computer engineering section, so lib/signstuff is audited. Version 5 (2026-10-03, Lane 5, substrate conformance) seats the x402 section by what its code does, as version 4 does for lib/signstuff: the protocol (payment requirements, facilitators, resource server, offers, admission, sign-in-with-x, the capability boundary, value settlement) is networking and stays under the networking section, while its apps, market, market observation, settlement derivation, Hive exit-tightness seller, HBD verification, exact-purchase service, receipt record and the tests of those compose chains, buckets, fleets, key custody, the system engine and the web and gui servers, so they are applications; the deepest matching directory wins, and the networking residue imports none of them.",
   "root": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section",
   "layers": [
     {
@@ -12,7 +12,7 @@
       "directories": [
         "services/computer-data-engineering-services-section",
         "services/computer-systems-engineering-services-section/services/computer-operating-system-services-section/services/computer-filesystem-services-section",
-        "services/computer-data-engineering-services-section/apps/signcell"
+        "lib/signstuff/signcell"
       ]
     },
     {
@@ -23,7 +23,7 @@
       ],
       "directories": [
         "services/computer-code-engineering-services-section",
-        "services/computer-code-engineering-services-section/apps/signchain"
+        "lib/signstuff/signchain"
       ]
     },
     {
@@ -35,7 +35,7 @@
       ],
       "directories": [
         "services/computer-networking-engineering-services-section",
-        "services/computer-networking-engineering-services-section/apps/signgraph"
+        "lib/signstuff/signgraph"
       ]
     },
     {
@@ -47,7 +47,7 @@
         "networking"
       ],
       "directories": [
-        "services/computer-systems-engineering-services-section/apps/signcraft"
+        "lib/signstuff/signcraft"
       ]
     },
     {
@@ -95,7 +95,7 @@
         "networking"
       ],
       "directories": [
-        "services/computer-systems-engineering-services-section/services/computer-web-engineering-services-section/apps/web-page-tiling-engine"
+        "services/computer-systems-engineering-services-section/services/computer-web-engineering-services-section/services/web-tufte-gui-services-section/apps/web-page-tiling-engine"
       ]
     },
     {

@@ -9,7 +9,8 @@ const absolutePaths = (value) => Array.isArray(value) && value.every((entry) => 
 /**
  * Wraps an exact command request so its program runs inside a bubblewrap sandbox: every namespace
  * unshared (no network, its own process tree, dying with the process that started it), the host
- * filesystem read-only, each `hidden` directory replaced by an empty tmpfs, each `readable` one shown
+ * filesystem read-only, with a hidden root applied before synthetic dev/proc. Other `hidden`
+ * directories are replaced by empty tmpfs mounts afterward, so explicit dev/proc masks remain hidden; each `readable` one is shown
  * again read-only and each `writable` one bound read-write, in that order, so a later entry reopens
  * what an earlier one hid. The program starts in the request's directory with exactly the request's
  * environment; nothing of the host's is inherited. The wrapped request is still one exact request,
@@ -36,8 +37,10 @@ export function isolateJavascriptNodeCommandExecutionRequest(isolation) {
     command: "bwrap",
     arguments: [
       "--die-with-parent", "--new-session", "--unshare-all",
-      "--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc",
-      ...isolation.hidden.flatMap((entry) => ["--tmpfs", entry]),
+      "--ro-bind", "/", "/",
+      ...isolation.hidden.filter((entry) => entry === "/").flatMap((entry) => ["--tmpfs", entry]),
+      "--dev", "/dev", "--proc", "/proc",
+      ...isolation.hidden.filter((entry) => entry !== "/").flatMap((entry) => ["--tmpfs", entry]),
       ...isolation.readable.flatMap((entry) => ["--ro-bind", entry, entry]),
       ...isolation.writable.flatMap((entry) => ["--bind", entry, entry]),
       "--chdir", request.directory,

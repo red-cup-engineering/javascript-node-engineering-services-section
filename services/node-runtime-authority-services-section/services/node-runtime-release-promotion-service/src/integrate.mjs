@@ -11,7 +11,7 @@ import {
 } from "./git-objects.mjs";
 import { LOCKFILE, deriveWorkspaceLockfile } from "./workspace-lockfile.mjs";
 import { releaseClaim } from "./claims.mjs";
-import { EMPTY_WITNESS_ROOT, identifyJsonSemanticContent } from "@red-cup-engineering/computer-content-engineering-services-section/semantic-content-identity";
+import { EMPTY_WITNESS_ROOT, identifyJsonSemanticContent } from "@red-cup-engineering/computer-content-address-engineering-services-section/semantic-content-identity";
 
 export const QUEUE_REF = "refs/queue/";
 export const ORIGIN_QUEUE_REF = "refs/remotes/origin/queue/";

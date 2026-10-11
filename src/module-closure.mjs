@@ -23,15 +23,23 @@ function packageOf(file) {
   return { root: dirname(manifest), manifest: JSON.parse(readFileSync(manifest, "utf8")) };
 }
 
-function condition(target, sourceMode) {
+function condition(target, sourceMode, privateTarget = false) {
   if (target === null || typeof target === "string") return target;
-  if (Array.isArray(target)) return target.map(value => condition(value, sourceMode)).find((value) => value != null) ?? null;
+  if (privateTarget && typeof target !== "object") throw new TypeError("JavaScript programme cannot admit an invalid private-import target");
+  if (Array.isArray(target)) {
+    for (const value of target) {
+      const chosen = condition(value, sourceMode, privateTarget);
+      if (chosen != null) return chosen;
+    }
+    return null;
+  }
+  if (privateTarget && Object.keys(target).some(key => String(Number(key)) === key && Number(key) >= 0 && Number(key) < 2 ** 32 - 1)) throw new TypeError("JavaScript programme cannot admit numeric private-import condition keys");
   const conditions = sourceMode === undefined ? CONDITIONS : Object.keys(target).filter(name => ["node", sourceMode, "module-sync", "node-addons", "default"].includes(name));
   for (const name of conditions) if (name in target) {
-    const chosen = condition(target[name], sourceMode);
-    if (chosen != null) return chosen;
+    const chosen = condition(target[name], sourceMode, privateTarget);
+    if (chosen !== undefined) return chosen;
   }
-  return null;
+  return undefined;
 }
 
 function exported(manifest, subpath, sourceMode) {
@@ -40,7 +48,12 @@ function exported(manifest, subpath, sourceMode) {
   const map = typeof exports === "string" || Array.isArray(exports) || !Object.keys(exports).some((key) => key.startsWith("."))
     ? { ".": exports }
     : exports;
-  if (subpath in map) return condition(map[subpath], sourceMode);
+  return mappedTarget(map, subpath, sourceMode);
+}
+
+// Package imports are already a #key map; unlike exports they have no root shorthand.
+function mappedTarget(map, subpath, sourceMode) {
+  if (subpath in map) return condition(map[subpath], sourceMode) ?? null;
   for (const [pattern, target] of Object.entries(map)) {
     const star = pattern.indexOf("*");
     if (star < 0 || !subpath.startsWith(pattern.slice(0, star)) || !subpath.endsWith(pattern.slice(star + 1))) continue;
@@ -48,6 +61,24 @@ function exported(manifest, subpath, sourceMode) {
     return condition(target, sourceMode)?.replaceAll("*", match) ?? null;
   }
   return null;
+}
+
+// Node chooses the most-specific private pattern before interpreting its target.
+// A null or condition-absent winning target never falls through to a broader key.
+function privateImportedTarget(map, subpath, sourceMode = "import") {
+  if (!subpath.includes("*") && Object.hasOwn(map, subpath)) return condition(map[subpath], sourceMode, true) ?? null;
+  const patterns = Object.keys(map).filter(pattern => {
+    const star = pattern.indexOf("*");
+    return star >= 0 && star === pattern.lastIndexOf("*") && subpath.length >= pattern.length && subpath.startsWith(pattern.slice(0, star)) && subpath.endsWith(pattern.slice(star + 1));
+  }).sort((left, right) => right.indexOf("*") - left.indexOf("*") || right.length - left.length);
+  const pattern = patterns[0];
+  if (pattern === undefined) return null;
+  const star = pattern.indexOf("*"), match = subpath.slice(star, subpath.length - (pattern.length - star - 1));
+  let segments;
+  try { segments = match.split(/[\\/]/u).map(decodeURIComponent); }
+  catch { throw new TypeError("JavaScript programme cannot admit malformed private-import pattern match"); }
+  if (segments.some(part => [".", "..", "node_modules"].includes(part.toLowerCase()))) throw new TypeError("JavaScript programme cannot admit private-import traversal or installation pattern match");
+  return condition(map[pattern], sourceMode, true)?.replaceAll("*", match) ?? null;
 }
 
 function packageDirectory(name, from) {
@@ -73,9 +104,29 @@ function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode)
   if (specifier.startsWith("file:")) return { file: fileURLToPath(specifier) };
   if (specifier.startsWith("#")) {
     const { root, manifest } = packageOf(from);
-    const target = exported({ exports: manifest.imports ?? {} }, specifier, sourceMode);
+    if (specifier === "#" || specifier.endsWith("/")) return { external: `invalid-private-import:${specifier}` };
+    const target = privateImportedTarget(manifest.imports ?? {}, specifier, sourceMode);
     if (target === null) return { external: `unresolved:${specifier}` };
-    return target.startsWith(".") ? { file: resolve(root, target) } : resolveSpecifier(target, join(root, "package.json"), includeInstalled, sourceMode);
+    if (target.startsWith(".")) {
+      // A private relative target must stay in this package, just as Node requires.
+      let segments;
+      try { segments = target.slice(2).split(/[\\/]/u).map(decodeURIComponent); }
+      catch { return { external: `invalid-import-target:${specifier}` }; }
+      if (!target.startsWith("./") || /%2f|%5c/iu.test(target) || segments.some(part => [".", "..", "node_modules"].includes(part.toLowerCase())))
+        return { external: `invalid-import-target:${specifier}` };
+      const url = new URL(target, pathToFileURL(root + sep));
+      // This reader identifies file bytes, not distinct query/fragment module instances.
+      if (url.search || url.hash) return { external: `unsupported-import-url-identity:${specifier}` };
+      return { file: fileURLToPath(url) };
+    }
+    if (target.startsWith("/") || target.startsWith("#") || target.includes("\\") || URL.canParse(target))
+      return { external: `invalid-import-target:${specifier}` };
+    const packageParts = target.split("/");
+    const packageName = target.startsWith("@") ? packageParts.slice(0, 2).join("/") : packageParts[0];
+    if (!packageName || packageName.includes("%") || target.startsWith("@") && (!packageParts[0].slice(1) || !packageParts[1]))
+      return { external: `invalid-import-target:${specifier}` };
+    if (BUILTIN.has(target.split("/")[0])) return { builtin: `node:${target}` };
+    return resolveSpecifier(target, join(root, "package.json"), includeInstalled, sourceMode);
   }
   const parts = specifier.split("/");
   const name = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
@@ -123,7 +174,7 @@ export function moduleClosureDigest(entries) {
     for (const specifier of importsOf(file, bytes.toString("utf8"))) {
       const resolved = resolveSpecifier(specifier, file);
       if (resolved?.external) external.add(resolved.external);
-      else if (resolved) pending.push(realpathSync(resolved.file));
+      else if (resolved?.file) pending.push(realpathSync(resolved.file));
     }
   }
   const hash = createHash("sha256");
@@ -230,6 +281,7 @@ export function captureModuleClosure(entry) {
         continue;
       }
       const target = resolveSpecifier(specifier, file, true, mode);
+      if (target?.builtin) { imports[requestKey] = target.builtin; continue; }
       if (!target?.file) throw new TypeError(`JavaScript programme cannot admit ${specifier} from ${key}: ${target?.external ?? "missing source"}`);
       const resolved = realpathSync(target.file);
       imports[requestKey] = keyOf(resolved);

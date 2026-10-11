@@ -19,7 +19,7 @@ test("ignores relative imports", () => {
 });
 test("ignores every house scope", () => {
   const text = [
-    "@red-cup-engineering/file-services", "@red-cup-engineering/metrologic", "@561-group/board-of-directors",
+    "@red-cup-engineering/computer-file-engineering-services-section", "@red-cup-engineering/metrologic", "@561-group/board-of-directors",
     "@emsenn/personal", "@causeway-services/gateway", "@coesite-operations/ledger",
   ].map((specifier) => `import x from "${specifier}/x.mjs";`).join("\n");
   assert.equal(auditExternalImports({ path: "scripts/x.mjs", text }).count, 0);

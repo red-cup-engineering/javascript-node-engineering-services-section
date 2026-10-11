@@ -4,7 +4,7 @@ import { auditNodeBuiltinImports, newlyIntroducedNodeBuiltinImportFindings } fro
 
 test("finds an owned built-in import with its line and owner", () => {
   const audit = auditNodeBuiltinImports({ path: "scripts/x.mjs", text: "import { readFileSync } from \"node:fs\";\n" });
-  assert.deepEqual(audit.findings, [{ line: 1, builtin: "node:fs", houseService: "@red-cup-engineering/file-services" }]);
+  assert.deepEqual(audit.findings, [{ line: 1, builtin: "node:fs", houseService: "@red-cup-engineering/computer-file-engineering-services-section" }]);
   assert.equal(audit.count, 1);
 });
 test("ignores unowned built-ins", () => {
@@ -12,14 +12,14 @@ test("ignores unowned built-ins", () => {
   assert.equal(audit.count, 0);
 });
 test("exempts the owning package", () => {
-  const audit = auditNodeBuiltinImports({ path: "scripts/read-file.mjs", text: "import { readFile } from \"node:fs/promises\";\n", packageName: "@red-cup-engineering/file-services" });
+  const audit = auditNodeBuiltinImports({ path: "scripts/read-file.mjs", text: "import { readFile } from \"node:fs/promises\";\n", packageName: "@red-cup-engineering/computer-file-engineering-services-section" });
   assert.equal(audit.count, 0);
 });
 test("refuses a missing text", () => assert.throws(() => auditNodeBuiltinImports({ path: "x" }), /path and text are required/u));
 
 test("newly-introduced findings treats a file with no earlier text as all-new", () => {
   const findings = newlyIntroducedNodeBuiltinImportFindings({ path: "scripts/x.mjs", text: "import { readFileSync } from \"node:fs\";\n" });
-  assert.deepEqual(findings, [{ line: 1, builtin: "node:fs", houseService: "@red-cup-engineering/file-services" }]);
+  assert.deepEqual(findings, [{ line: 1, builtin: "node:fs", houseService: "@red-cup-engineering/computer-file-engineering-services-section" }]);
 });
 
 test("newly-introduced findings excludes a finding already present in the earlier text", () => {

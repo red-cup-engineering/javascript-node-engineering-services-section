@@ -12,8 +12,8 @@ import { runJavascriptNodeOperation } from "../src/operation.mjs";
 // builtins that already have a named house owner, for callers (such as MetroPlat's
 // checkout-health monitor) that still read that specific, narrower signal.
 const HOUSE_OWNERS = Object.freeze({
-  "node:fs": "@red-cup-engineering/file-services",
-  "node:fs/promises": "@red-cup-engineering/file-services",
+  "node:fs": "@red-cup-engineering/computer-file-engineering-services-section",
+  "node:fs/promises": "@red-cup-engineering/computer-file-engineering-services-section",
   "node:path": "@red-cup-engineering/computer-filepath-engineering-services-section/filepath",
   "node:child_process": "@red-cup-engineering/execute-javascript-node-command-service",
   "@modelcontextprotocol/sdk/server/stdio.js": null,

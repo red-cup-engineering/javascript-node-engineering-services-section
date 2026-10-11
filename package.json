@@ -30,6 +30,8 @@
     "./ratchet-layer-imports": "./scripts/ratchet-layer-imports.mjs",
     "./audit-formal-object-copies": "./scripts/audit-formal-object-copies.mjs",
     "./finding-ratchet": "./src/finding-ratchet.mjs",
+    "./std-entry": "./src/std-entry.mjs",
+    "./apply-std-entry": "./scripts/apply-std-entry.mjs",
     "./git-tree-at-ref": "./src/git-tree-at-ref.mjs",
     "./discover-house-packages": "./src/discover-house-packages.mjs",
     "./audit-hull-kernel": "./scripts/audit-hull-kernel.mjs",
@@ -48,7 +50,10 @@
     "README.md",
     "src",
     "scripts",
-    "data"
+    "data",
+    "scripts/run-javascript-node-operation-module.mjs",
+    "scripts/register-house-resolver.mjs",
+    "src/*.mjs"
   ],
   "scripts": {
     "test": "run-package-tests",
@@ -64,7 +69,10 @@
     "@red-cup-engineering/markdown-engineering-services-section": "workspace:*",
     "@red-cup-engineering/read-javascript-file-export-documentation-service": "workspace:*",
     "@red-cup-engineering/computer-code-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/computer-data-engineering-services-section": "workspace:*"
+    "@red-cup-engineering/computer-data-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/node-process-services-section": "workspace:*",
+    "@red-cup-engineering/metrologic": "workspace:*",
+    "@red-cup-engineering/jsonl-services-section": "workspace:*"
   },
   "devDependencies": {
     "@red-cup-engineering/jsnode-package-services-section": "workspace:*",

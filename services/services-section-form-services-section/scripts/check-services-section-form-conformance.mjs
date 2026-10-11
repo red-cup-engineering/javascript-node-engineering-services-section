@@ -5,7 +5,7 @@ import { findServicesSectionRepositoryRoot, readServicesSectionLaw } from "./rea
 
 const operationDefinition = {
   name: "checkServicesSectionFormConformance",
-  description: "Checks a ServicesSectionForm record for conformance against services-section-form.schema.json, composing @red-cup-engineering/computer-data-engine for the whole judgment.",
+  description: "Checks a ServicesSectionForm record for conformance against services-section-form.schema.json, composing @red-cup-engineering/json-schema-services-section for the whole judgment.",
   inputSchema: { type: "object" },
   outputSchema: {
     type: "object",

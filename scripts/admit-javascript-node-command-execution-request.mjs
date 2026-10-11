@@ -3,7 +3,6 @@ import path from "node:path";
 
 import operationInputSchema from "../data/records/admit-javascript-node-command-execution-request.input.schema.json" with { type: "json" };
 import operationOutputSchema from "../data/records/admit-javascript-node-command-execution-request.output.schema.json" with { type: "json" };
-import { runJavascriptNodeOperation } from "../src/operation.mjs";
 
 /**
  * Admits a candidate as an exact JavascriptNodeCommandExecutionRequest@1, unchanged.
@@ -39,6 +38,7 @@ export function admitJavascriptNodeCommandExecutionRequest(request) {
 }
 
 if (import.meta.main) {
+  const { runJavascriptNodeOperation } = await import("../src/operation.mjs");
   const result = await runJavascriptNodeOperation({ name: "admit-javascript-node-command-execution-request", description: "Admits a candidate as an exact JavascriptNodeCommandExecutionRequest@1, unchanged.", operation: admitJavascriptNodeCommandExecutionRequest, inputSchema: operationInputSchema, outputSchema: operationOutputSchema }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });
   process.exitCode = result.exitCode;
 }

@@ -1,0 +1,34 @@
+{
+  "name": "@red-cup-engineering/node-runtime-release-promotion-service",
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Materialize a commit or staged tree as one content-addressed Node runtime release, and atomically bind a verified release to a named deployment pointer.",
+  "exports": {
+    ".": "./src/promote-release.mjs",
+    "./materialize": "./src/materialize-release.mjs",
+    "./digest": "./src/release-digest.mjs",
+    "./reconcile": "./src/reconcile-release.mjs",
+    "./install-workspace-selection": "./src/install-workspace-selection.mjs",
+    "./job": "./src/node-job.mjs",
+    "./integrate": "./src/integrate.mjs",
+    "./service": "./src/node-service.mjs",
+    "./source-delivery": "./src/source-delivery.mjs"
+  },
+  "bin": {
+    "promote-node-runtime-release": "./scripts/promote-node-runtime-release.mjs",
+    "materialize-node-runtime-release": "./scripts/materialize-node-runtime-release.mjs",
+    "release-git-commit": "./scripts/release-git-commit.mjs",
+    "install-workspace-selection": "./scripts/install-workspace-selection.mjs",
+    "reconcile-node-release": "./scripts/reconcile-node-release.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "esbuild": "0.28.1",
+    "@red-cup-engineering/computer-content-engineering-services-section": "workspace:*"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

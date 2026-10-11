@@ -1,0 +1,28 @@
+{
+  "name": "@red-cup-engineering/pnpm-workspace-fabrication-service",
+  "version": "0.0.0",
+  "description": "Fabricates an explicitly ordered pnpm workspace as a customer artifact without granting workspace authority over the provider organism.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "exports": "./src/fabricate-pnpm-workspace.mjs",
+  "files": [
+    "src",
+    "scripts",
+    "package.json"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "bin": {
+    "fabricate-pnpm-workspace": "./scripts/fabricate-pnpm-workspace.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "pack:dry-run": "npm pack --dry-run --ignore-scripts"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

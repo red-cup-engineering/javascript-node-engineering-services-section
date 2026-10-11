@@ -2,7 +2,6 @@
 import path from "node:path";
 
 import { admitJavascriptNodeCommandExecutionRequest } from "@red-cup-engineering/javascript-node-services-section/admit-javascript-node-command-execution-request";
-import { runJavascriptNodeOperation } from "../src/operation.mjs";
 
 const absolutePaths = (value) => Array.isArray(value) && value.every((entry) => typeof entry === "string" && path.isAbsolute(entry) && path.resolve(entry) === entry);
 
@@ -54,6 +53,7 @@ export function isolateJavascriptNodeCommandExecutionRequest(isolation) {
 }
 
 if (import.meta.main) {
+  const { runJavascriptNodeOperation } = await import("../src/operation.mjs");
   const result = await runJavascriptNodeOperation({ name: "isolate-javascript-node-command-execution-request", description: "Wraps an exact command request so its program runs inside a bubblewrap sandbox.", operation: isolateJavascriptNodeCommandExecutionRequest }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });
   process.exitCode = result.exitCode;
 }

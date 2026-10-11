@@ -205,5 +205,5 @@ test("the command preserves its help face without reading NDJSON", () => {
     encoding: "utf8",
   });
   assert.equal(command.status, 0, command.stderr);
-  assert.equal(command.stdout, "checkServicesSectionFormConformance — Checks a ServicesSectionForm record for conformance against services-section-form.schema.json, composing @red-cup-engineering/computer-data-engine for the whole judgment.\n");
+  assert.equal(command.stdout, "checkServicesSectionFormConformance — Checks a ServicesSectionForm record for conformance against services-section-form.schema.json, composing @red-cup-engineering/json-schema-services-section for the whole judgment.\n");
 });

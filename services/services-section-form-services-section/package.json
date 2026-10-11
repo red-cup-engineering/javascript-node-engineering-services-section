@@ -1,0 +1,45 @@
+{
+  "name": "@red-cup-engineering/services-section-form-services-section",
+  "version": "0.1.0",
+  "description": "The services-section-form topic section: folds a section's directory entries into a ServicesSectionForm record, founds a new services-section directory in that shape, reads a whole tree of sections into those records, derives a section's path from its name, and checks a ServicesSectionForm record for conformance against services-section-form.schema.json.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "exports": {
+    "./fold-directory-entries-into-services-section-form": "./scripts/fold-directory-entries-into-services-section-form.mjs",
+    "./found-services-section": "./scripts/found-services-section.mjs",
+    "./check-services-section-form-conformance": "./scripts/check-services-section-form-conformance.mjs",
+    "./read-services-section-tree": "./scripts/read-services-section-tree.mjs",
+    "./read-services-section-law": "./scripts/read-services-section-law.mjs",
+    "./derive-services-section-path": "./scripts/derive-services-section-path.mjs"
+  },
+  "bin": {
+    "fold-directory-entries-into-services-section-form": "scripts/fold-directory-entries-into-services-section-form.mjs",
+    "found-services-section": "scripts/found-services-section.mjs",
+    "check-services-section-form-conformance": "scripts/check-services-section-form-conformance.mjs",
+    "read-services-section-tree": "scripts/read-services-section-tree.mjs",
+    "derive-services-section-path": "scripts/derive-services-section-path.mjs"
+  },
+  "files": [
+    "scripts",
+    "README.md",
+    "package.json"
+  ],
+  "dependencies": {
+    "@coesite-operations/enterprise-branding-services-section": "workspace:*",
+    "@red-cup-engineering/computer-filepath-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/computer-file-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/javascript-node-services-section": "workspace:*",
+    "@red-cup-engineering/json-schema-services-section": "workspace:*",
+    "@red-cup-engineering/markdown-engineering-services-section": "workspace:*"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "check": "node --check scripts/fold-directory-entries-into-services-section-form.mjs && node --check scripts/found-services-section.mjs && node --check scripts/check-services-section-form-conformance.mjs && node --check scripts/read-services-section-tree.mjs",
+    "test": "node --test test/*.test.mjs",
+    "pack:dry-run": "npm pack --dry-run --ignore-scripts"
+  },
+  "engines": {
+    "node": ">=24.2.0"
+  }
+}

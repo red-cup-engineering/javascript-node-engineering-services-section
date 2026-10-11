@@ -50,7 +50,10 @@
     "README.md",
     "src",
     "scripts",
-    "data"
+    "data",
+    "scripts/run-javascript-node-operation-module.mjs",
+    "scripts/register-house-resolver.mjs",
+    "src/*.mjs"
   ],
   "scripts": {
     "test": "node --test test/*.test.mjs",
@@ -67,7 +70,9 @@
     "@red-cup-engineering/read-javascript-file-export-documentation-service": "workspace:*",
     "@red-cup-engineering/computer-code-engineering-services-section": "workspace:*",
     "@red-cup-engineering/computer-data-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/node-process-services-section": "workspace:*"
+    "@red-cup-engineering/node-process-services-section": "workspace:*",
+    "@red-cup-engineering/metrologic": "workspace:*",
+    "@red-cup-engineering/jsonl-services-section": "workspace:*"
   },
   "devDependencies": {
     "@red-cup-engineering/jsonl-services-section": "workspace:*",

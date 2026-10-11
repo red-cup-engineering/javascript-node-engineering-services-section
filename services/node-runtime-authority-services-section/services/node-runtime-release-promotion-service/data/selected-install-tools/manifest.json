@@ -1,0 +1,9 @@
+{
+  "name": "node-runtime-selection-tools",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@pnpm/lockfile.filtering": "1100.2.10",
+    "@pnpm/lockfile.fs": "1100.2.10"
+  }
+}

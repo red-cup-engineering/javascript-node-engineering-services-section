@@ -1,0 +1,18 @@
+{
+  "name": "@red-cup-engineering/node-package-authority-assay-service",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Observe package-manager authority and conflicting installation signals without invoking a package manager.",
+  "exports": {
+    ".": "./src/assay-package-authority.mjs"
+  },
+  "bin": {
+    "assay-node-package-authority": "./scripts/assay-node-package-authority.mjs"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=22.18"
+  }
+}

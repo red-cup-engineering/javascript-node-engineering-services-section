@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -40,6 +40,34 @@ async function execute(command, args, { cwd, environment, onOutput } = {}) {
 async function optionalBytes(file) {
   try { return await readFile(file); }
   catch (error) { if (error.code === "ENOENT") return undefined; throw error; }
+}
+
+async function sourceBinModes(root, importerIds) {
+  const bins = new Map();
+  for (const id of importerIds) {
+    const manifest = JSON.parse(await readFile(join(root, id, "package.json"), "utf8"));
+    const entries = typeof manifest.bin === "string" ? [manifest.bin] : Object.values(manifest.bin ?? {});
+    for (const entry of entries) {
+      const file = resolve(root, id, entry);
+      if (!contained(root, file)) throw new Error("source bin escapes the selected checkout");
+      const bytes = await optionalBytes(file);
+      if (bytes !== undefined) bins.set(file, { mode: (await stat(file)).mode & 0o777, hash: digest(bytes) });
+    }
+  }
+  return bins;
+}
+
+async function preserveSourceBinModes(bins) {
+  for (const [file, original] of bins) {
+    assert.equal(digest(await readFile(file)), original.hash, "source bin changed during installation: " + file);
+    const mode = (await stat(file)).mode & 0o777;
+    if (mode !== original.mode) {
+      // pnpm links source bins and adds execute bits. Preserve the immutable
+      // checkout's modes; deployed copies receive their executable bin modes.
+      if ((mode & ~0o111) !== (original.mode & ~0o111)) throw new Error("source bin permissions changed beyond executable bits: " + file);
+      await chmod(file, original.mode);
+    }
+  }
 }
 
 /** Reuse the frozen installation's scope for its actual generation or packing command. */
@@ -304,7 +332,9 @@ export async function installWorkspaceSelection({
     await writeFile(receiptPath, json(receipt));
     if (!prepareOnly) {
       const started = Date.now();
-      await runPnpm(command, root, onOutput);
+      const bins = await sourceBinModes(root, importerIds);
+      try { await runPnpm(command, root, onOutput); }
+      finally { await preserveSourceBinModes(bins); }
       receipt.elapsedMilliseconds = Date.now() - started;
       assert.deepEqual(await readFile(join(artifact, "pnpm-lock.yaml")), scopedBytes, "selected frozen lock changed");
       receipt.status = "installed";

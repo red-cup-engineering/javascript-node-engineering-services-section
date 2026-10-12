@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -42,6 +42,72 @@ async function optionalBytes(file) {
   catch (error) { if (error.code === "ENOENT") return undefined; throw error; }
 }
 
+async function sourceBinModes(root, importerIds) {
+  const bins = new Map();
+  for (const id of importerIds) {
+    const manifest = JSON.parse(await readFile(join(root, id, "package.json"), "utf8"));
+    const entries = typeof manifest.bin === "string" ? [manifest.bin] : Object.values(manifest.bin ?? {});
+    for (const entry of entries) {
+      const file = resolve(root, id, entry);
+      if (!contained(root, file)) throw new Error("source bin escapes the selected checkout");
+      const bytes = await optionalBytes(file);
+      if (bytes !== undefined) bins.set(file, { mode: (await stat(file)).mode & 0o777, hash: digest(bytes) });
+    }
+  }
+  return bins;
+}
+
+async function preserveSourceBinModes(bins) {
+  for (const [file, original] of bins) {
+    assert.equal(digest(await readFile(file)), original.hash, "source bin changed during installation: " + file);
+    const mode = (await stat(file)).mode & 0o777;
+    if (mode !== original.mode) {
+      // pnpm links source bins and adds execute bits. Preserve the immutable
+      // checkout's modes; deployed copies receive their executable bin modes.
+      if ((mode & ~0o111) !== (original.mode & ~0o111)) throw new Error("source bin permissions changed beyond executable bits: " + file);
+      await chmod(file, original.mode);
+    }
+  }
+}
+
+/** Reuse the frozen installation's scope for its actual generation or packing command. */
+export async function runWorkspaceSelection({ receipt, arguments: args, environment = process.env, onOutput } = {}) {
+  if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
+      || receipt.status !== "installed" || receipt.sourceConfigurationUnchanged !== true) {
+    throw new TypeError("an installed, unchanged workspace selection is required");
+  }
+  if (!Array.isArray(args) || !args.length || args.some(arg => typeof arg !== "string" || !arg || arg.includes("\0"))) {
+    throw new TypeError("pnpm arguments are required");
+  }
+  if (args.some(arg => /^(?:--(?:config\.)?(?:workspace-packages|lockfile-dir|dir)|-C)(?:=|$)/u.test(arg))) {
+    throw new TypeError("a consumer command cannot replace the selected source or lock scope");
+  }
+  const root = await realpath(receipt.workspace);
+  const verify = async () => {
+    assert.equal((await execute("git", ["-C", root, "rev-parse", "HEAD"], { environment })).trim(), receipt.commit,
+      "selected source revision changed");
+    assert.equal(digest(await readFile(join(receipt.artifact, "pnpm-lock.yaml"))), receipt.scopedLockSha256,
+      "selected frozen lock changed");
+    for (const [name, hash] of Object.entries(receipt.sourceHashes)) {
+      assert.equal(digest(await readFile(join(root, name))), hash, "source configuration changed: " + name);
+    }
+    for (const [id, hash] of Object.entries(receipt.manifestHashes)) {
+      assert.equal(digest(await readFile(join(root, id, "package.json"))), hash, "selected manifest changed: " + id);
+    }
+  };
+  await verify();
+  const scope = receipt.importerIds.filter(id => id !== ".").map(id => "--workspace-packages=" + id);
+  // `run` does not expose install's --lockfile-dir CLI flag; the maintained
+  // pnpm config namespace carries this same setting across both commands.
+  const command = ["--config.lockfile-dir=" + receipt.artifact, ...scope, ...args];
+  const bins = await sourceBinModes(root, receipt.importerIds);
+  try { await execute(receipt.executable, command, { cwd: root, environment, onOutput }); }
+  finally { await preserveSourceBinModes(bins); }
+  await verify();
+  return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,
+    executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true };
+}
+
 /** Select source importers by following committed links, without discovering unrelated projects. */
 export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace }) {
   if (String(lockfile?.lockfileVersion) !== "9.0") throw new Error("selected install requires a pnpm v9 lockfile");
@@ -76,7 +142,17 @@ async function materializeSelectedSources({ root, importerIds, environment, onOu
   const sparse = await git(root, "config", "--bool", "core.sparseCheckout").catch((error) => {
     if (error.exitCode === 1) return "false"; throw error;
   });
-  if (sparse.trim() === "true") await git(root, "sparse-checkout", "add", "--skip-checks", "--", ...importerIds.filter((id) => id !== "."));
+  if (sparse.trim() === "true") {
+    // Root-owned instance data and agency carriers are package files too. A
+    // source selection which keeps only nested importers silently drops them.
+    const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+    const assets = (manifest.files ?? []).filter(path => typeof path === "string" && !path.startsWith("!"))
+      .map(path => path.split(/[?*[{]/u, 1)[0].replace(/\/$/u, ""));
+    for (const asset of assets) {
+      if (!asset || !contained(root, resolve(root, asset))) throw new Error("root package files require bounded paths within the selected checkout");
+    }
+    await git(root, "sparse-checkout", "add", "--skip-checks", "--", ...importerIds.filter(id => id !== "."), ...assets);
+  }
   const mounts = [];
   async function receive(repository, paths) {
     const hasModules = await git(repository, "ls-tree", "HEAD", "--", ".gitmodules");
@@ -268,7 +344,9 @@ export async function installWorkspaceSelection({
     await writeFile(receiptPath, json(receipt));
     if (!prepareOnly) {
       const started = Date.now();
-      await runPnpm(command, root, onOutput);
+      const bins = await sourceBinModes(root, importerIds);
+      try { await runPnpm(command, root, onOutput); }
+      finally { await preserveSourceBinModes(bins); }
       receipt.elapsedMilliseconds = Date.now() - started;
       assert.deepEqual(await readFile(join(artifact, "pnpm-lock.yaml")), scopedBytes, "selected frozen lock changed");
       receipt.status = "installed";

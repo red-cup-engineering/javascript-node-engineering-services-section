@@ -19,17 +19,17 @@ function git(args, { cwd, gitDir, input } = {}) {
 }
 
 /** The submodule paths .gitmodules names at a commit, each with its module name. */
-function submodulesAt(root, commit) {
+function submodulesAt(root, commit, gitDir) {
   let text;
-  try { text = git(["show", `${commit}:.gitmodules`], { cwd: root }).toString("utf8"); } catch { return new Map(); }
+  try { text = git(["show", `${commit}:.gitmodules`], { cwd: root, gitDir }).toString("utf8"); } catch { return new Map(); }
   const paths = new Map();
   for (const match of text.matchAll(/^\[submodule "([^"]+)"\][^[]*?^\s*path\s*=\s*(.+?)\s*$/gmu)) paths.set(match[2], match[1]);
   return paths;
 }
 
 /** The object store holding a submodule's commits: the superproject's module directory, else a nested repository at its path. */
-function submoduleGitDir(root, path, name) {
-  const common = git(["rev-parse", "--git-common-dir"], { cwd: root }).toString("utf8").trim();
+function submoduleGitDir(root, path, name, gitDir) {
+  const common = git(["rev-parse", "--git-common-dir"], { cwd: root, gitDir }).toString("utf8").trim();
   const modules = join(isAbsolute(common) ? common : join(root, common), "modules", name);
   if (existsSync(modules)) return modules;
   const nested = join(root, path, ".git");
@@ -56,16 +56,22 @@ export function gitTreeAtRef(root, ref, { pathspec = ["lib"] } = {}) {
   const commit = git(["rev-parse", "--verify", `${ref}^{commit}`], { cwd: root }).toString("utf8").trim();
   const blobs = new Map();
   const unreadable = [];
-  const submodules = submodulesAt(root, commit);
-  for (const entry of lsTree(commit, pathspec, { cwd: root })) {
-    if (entry.type === "blob") { blobs.set(entry.path, { id: entry.id, store: undefined }); continue; }
-    if (entry.type !== "commit") continue;
-    const gitDir = submoduleGitDir(root, entry.path, submodules.get(entry.path) ?? entry.path);
-    let nested;
-    try { nested = gitDir === undefined ? undefined : lsTree(entry.id, [], { gitDir }); } catch { nested = undefined; }
-    if (nested === undefined) { unreadable.push(Object.freeze({ path: entry.path, commit: entry.id })); continue; }
-    for (const inner of nested) if (inner.type === "blob") blobs.set(`${entry.path}/${inner.path}`, { id: inner.id, store: gitDir });
-  }
+  const visit = (treeCommit, store, prefix, selection) => {
+    const submodules = submodulesAt(root, treeCommit, store);
+    for (const entry of lsTree(treeCommit, selection, { cwd: root, gitDir: store })) {
+      const path = prefix === "" ? entry.path : `${prefix}/${entry.path}`;
+      if (entry.type === "blob") { blobs.set(path, { id: entry.id, store }); continue; }
+      if (entry.type !== "commit") continue;
+      const nestedStore = submoduleGitDir(root, path, submodules.get(entry.path) ?? entry.path, store);
+      if (nestedStore === undefined) { unreadable.push(Object.freeze({ path, commit: entry.id })); continue; }
+      // An unread local child stays explicit. Descendants are read through the
+      // parent's own object store, never from a moving remote branch.
+      try { git(["cat-file", "-e", `${entry.id}^{commit}`], { cwd: root, gitDir: nestedStore }); }
+      catch { unreadable.push(Object.freeze({ path, commit: entry.id })); continue; }
+      visit(entry.id, nestedStore, path, []);
+    }
+  };
+  visit(commit, undefined, "", pathspec);
   return Object.freeze({
     ref,
     commit,

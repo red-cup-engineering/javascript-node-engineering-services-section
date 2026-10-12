@@ -42,6 +42,75 @@ async function optionalBytes(file) {
   catch (error) { if (error.code === "ENOENT") return undefined; throw error; }
 }
 
+/** Select source importers by following committed links, without discovering unrelated projects. */
+export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace }) {
+  if (String(lockfile?.lockfileVersion) !== "9.0") throw new Error("selected install requires a pnpm v9 lockfile");
+  if (!Array.isArray(importerIds) || !importerIds.length) throw new TypeError("at least one importer path is required");
+  const root = resolve(workspace), selected = new Set(), pending = [".", ...importerIds];
+  while (pending.length) {
+    const input = pending.pop();
+    if (typeof input !== "string" || !input || isAbsolute(input) || input.includes("\0")) throw new TypeError("relative importer path required");
+    const path = resolve(root, input);
+    if (!contained(root, path)) throw new Error("importer escapes workspace: " + input);
+    const id = portable(relative(root, path)) || ".";
+    if (selected.has(id)) continue;
+    const importer = lockfile.importers?.[id];
+    if (!importer) throw new Error("selected importer is absent from the committed lock: " + id);
+    selected.add(id);
+    for (const field of fields) for (const [name, ref] of Object.entries(importer[field] ?? {})) {
+      if (typeof ref !== "string") throw new TypeError("invalid locked dependency " + name + " from " + id);
+      if (ref.startsWith("file:")) throw new Error("selected install cannot relocate local file dependencies: " + name);
+      if (ref.startsWith("link:")) {
+        const target = resolve(root, id, ref.slice(5));
+        if (!contained(root, target)) throw new Error("workspace link escapes checkout: " + name + " from " + id);
+        pending.push(portable(relative(root, target)) || ".");
+      }
+    }
+  }
+  return [...selected].sort();
+}
+
+/** Materialize only recorded Gitlinks containing selected source paths; never advance existing mounts. */
+async function materializeSelectedSources({ root, importerIds, environment, onOutput }) {
+  const git = (cwd, ...args) => execute("git", args, { cwd, environment });
+  const sparse = await git(root, "config", "--bool", "core.sparseCheckout").catch((error) => {
+    if (error.exitCode === 1) return "false"; throw error;
+  });
+  if (sparse.trim() === "true") await git(root, "sparse-checkout", "add", "--skip-checks", "--", ...importerIds.filter((id) => id !== "."));
+  const mounts = [];
+  async function receive(repository, paths) {
+    const hasModules = await git(repository, "ls-tree", "HEAD", "--", ".gitmodules");
+    if (!hasModules.trim()) return;
+    assert.deepEqual(await readFile(join(repository, ".gitmodules")), Buffer.from(await git(repository, "show", "HEAD:.gitmodules")), "mount configuration differs from recorded source");
+    const lines = await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get-regexp", "[.]path$").catch((error) => {
+      if (error.exitCode === 1) return ""; throw error;
+    });
+    for (const line of lines.trim().split("\n").filter(Boolean)) {
+      const path = line.replace(/^\S+\s+/u, "");
+      const wanted = paths.filter((id) => id === path || id.startsWith(path + "/"));
+      if (!wanted.length) continue;
+      const entry = (await git(repository, "ls-tree", "HEAD", "--", path)).trim();
+      const match = /^160000 commit ([a-f0-9]{40})\t(.+)$/u.exec(entry);
+      if (!match || match[2] !== path) throw new Error("selected mount is not a recorded Gitlink: " + path);
+      const staged = (await git(repository, "ls-files", "--stage", "--", path)).trim();
+      assert.equal(staged, "160000 " + match[1] + " 0\t" + path, "selected mount index differs from recorded source: " + path);
+      const target = resolve(repository, path);
+      if (!contained(root, target)) throw new Error("selected Gitlink escapes source checkout: " + path);
+      const status = await git(repository, "submodule", "status", "--", path);
+      if (status.startsWith("+") || status.startsWith("U")) throw new Error("selected mount differs from recorded source; preserve and reconcile it: " + path);
+      if (status.startsWith("-")) {
+        onOutput?.("Materializing selected Gitlink: " + portable(relative(root, target)) + "\n");
+        await execute("git", ["-c", "protocol.file.allow=never", "submodule", "update", "--init", "--checkout", "--", path], { cwd: repository, environment });
+      }
+      assert.equal((await git(target, "rev-parse", "HEAD")).trim(), match[1], "selected mount source changed: " + path);
+      mounts.push({ path: portable(relative(root, target)), revision: match[1] });
+      await receive(target, wanted.map((id) => id === path ? "." : id.slice(path.length + 1)));
+    }
+  }
+  await receive(root, importerIds);
+  return mounts;
+}
+
 /** Project pnpm's selected closure without changing pins, peers, integrity or workspace links. */
 export function projectSelectedWorkspaceLock({ lockfile, importerIds, workspace, lockfileDirectory, filterLockfileByImporters }) {
   if (String(lockfile?.lockfileVersion) !== "9.0") throw new Error("selected install requires a pnpm v9 lockfile");
@@ -92,15 +161,20 @@ export function projectSelectedWorkspaceLock({ lockfile, importerIds, workspace,
  * Only generated tooling, scoped lockfiles and receipts go into the external state directory.
  */
 export async function installWorkspaceSelection({
-  workspace, selector, stateDirectory, pnpm = "pnpm", storeDirectory,
+  workspace, expectedCommit, selector, importerIds: requestedImporters, materializeSources = false, planOnly = false, stateDirectory, pnpm = "pnpm", storeDirectory,
   prepareOnly = false, environment = process.env, onOutput = (chunk) => process.stderr.write(chunk),
 }) {
-  if (typeof selector !== "string" || !selector.trim() || selector.startsWith("-")) throw new TypeError("one nonempty pnpm selector is required");
+  if ((selector !== undefined) === (requestedImporters !== undefined)) throw new TypeError("choose a pnpm selector or explicit importer paths");
+  if (selector !== undefined && (typeof selector !== "string" || !selector.trim() || selector.startsWith("-"))) throw new TypeError("one nonempty pnpm selector is required");
+  if ((materializeSources || planOnly) && requestedImporters === undefined) throw new TypeError("source planning and materialization require explicit importer paths");
+  if (planOnly && (materializeSources || prepareOnly)) throw new TypeError("plan-only cannot install or materialize source");
+  const startedAt = Date.now();
   if (!workspace || !stateDirectory) throw new TypeError("workspace and stateDirectory are required");
   const root = await realpath(resolve(workspace));
   const git = (...args) => execute("git", ["-C", root, ...args], { environment });
   assert.equal(await realpath((await git("rev-parse", "--show-toplevel")).trim()), root, "workspace must be the actual checkout root");
   const commit = (await git("rev-parse", "--verify", "HEAD^{commit}")).trim();
+  if (expectedCommit !== undefined) assert.equal(commit, expectedCommit, "source checkout is not the requested revision");
   const before = new Map();
   for (const name of ["package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", ".npmrc"]) before.set(name, await optionalBytes(join(root, name)));
   if (!before.get("pnpm-workspace.yaml") || !before.get("pnpm-lock.yaml")) throw new Error("checkout must contain a workspace and committed full lockfile");
@@ -122,22 +196,11 @@ export async function installWorkspaceSelection({
     if (!version || Number(version[1]) < 11 || (Number(version[1]) === 11 && Number(version[2]) < 19)) {
       throw new Error("selected install requires pnpm 11.19 or newer, without downgrading or disabling policy checks");
     }
-    const projects = JSON.parse(await runPnpm(["--filter", selector, "--fail-if-no-match", "list", "--depth=-1", "--json"]));
-    if (!projects.length) throw new Error("pnpm selector matched no projects");
-    const importerIds = [...new Set([".", ...projects.map(({ path }) => {
-      const id = portable(relative(root, resolve(path))) || ".";
-      if (!contained(root, resolve(path))) throw new Error("pnpm selected a project outside the checkout");
-      return id;
-    })])].sort();
-    const workspaceArgs = importerIds.filter((id) => id !== ".").map((id) => "--workspace-packages=" + id);
-    const scopedProjects = JSON.parse(await runPnpm([...workspaceArgs, "list", "--recursive", "--depth=-1", "--json"]));
-    assert.deepEqual(scopedProjects.map(({ path }) => portable(relative(root, path)) || ".").sort(), importerIds, "explicit pnpm workspace scope differs from selection");
-    const manifestHashes = {};
-    for (const id of importerIds) manifestHashes[id] = digest(await readFile(join(root, id, "package.json")));
     const policies = {};
-    for (const name of policyNames) {
-      const value = (await runPnpm(["config", "get", name, "--json"])).trim();
-      if (value) policies[name] = JSON.parse(value);
+    for (let offset = 0; offset < policyNames.length; offset += 4) {
+      const values = await Promise.all(policyNames.slice(offset, offset + 4).map(async (name) =>
+        [name, (await runPnpm(["config", "get", name, "--json"])).trim()]));
+      for (const [name, value] of values) if (value) policies[name] = JSON.parse(value);
     }
     // The bootstrap uses only official, pinned pnpm packages and its own frozen lock.
     // Carry applicable source supply/build policies into the isolated toolchain as well.
@@ -156,18 +219,45 @@ export async function installWorkspaceSelection({
     const { readWantedLockfile, writeWantedLockfile } = await import(pathToFileURL(require.resolve("@pnpm/lockfile.fs")).href);
     const { filterLockfileByImporters } = await import(pathToFileURL(require.resolve("@pnpm/lockfile.filtering")).href);
     const sourceLock = await readWantedLockfile(root, { ignoreIncompatible: false });
+    let importerIds, sourceMounts = [];
+    if (requestedImporters !== undefined) {
+      importerIds = selectLockedWorkspaceClosure({ lockfile: sourceLock, importerIds: requestedImporters, workspace: root });
+      if (planOnly) {
+        assert.equal((await git("rev-parse", "HEAD")).trim(), commit, "source revision changed during selection");
+        for (const [name, bytes] of before) assert.deepEqual(await optionalBytes(join(root, name)), bytes, "source configuration changed: " + name);
+        return { type: "NodeRuntimeLockedSourceSelection", version: 1, workspace: root, commit,
+          roots: requestedImporters, importerIds, sourceLockSha256: digest(before.get("pnpm-lock.yaml")),
+          sourceImporterCount: Object.keys(sourceLock.importers).length, sourceConfigurationUnchanged: true,
+          elapsedMilliseconds: Date.now() - startedAt };
+      }
+      if (materializeSources) sourceMounts = await materializeSelectedSources({ root, importerIds, environment, onOutput });
+      const sourceChanges = await git("status", "--porcelain=v1", "--untracked-files=normal", "--", "package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", ".npmrc", ...importerIds.filter((id) => id !== "."));
+      if (sourceChanges.trim()) throw new Error("selected source has local changes; preserve and reconcile it before locked installation");
+    } else {
+      const projects = JSON.parse(await runPnpm(["--filter", selector, "--fail-if-no-match", "list", "--depth=-1", "--json"]));
+      if (!projects.length) throw new Error("pnpm selector matched no projects");
+      importerIds = [...new Set([".", ...projects.map(({ path }) => {
+        if (!contained(root, resolve(path))) throw new Error("pnpm selected a project outside the checkout");
+        return portable(relative(root, resolve(path))) || ".";
+      })])].sort();
+    }
+    const workspaceArgs = importerIds.filter((id) => id !== ".").map((id) => "--workspace-packages=" + id);
+    const scopedProjects = JSON.parse(await runPnpm([...workspaceArgs, "list", "--recursive", "--depth=-1", "--json"]));
+    assert.deepEqual(scopedProjects.map(({ path }) => portable(relative(root, path)) || ".").sort(), importerIds, "explicit pnpm workspace scope differs from selection");
+    const manifestHashes = {};
+    for (const id of importerIds) manifestHashes[id] = digest(await readFile(join(root, id, "package.json")));
     const sourceHashes = Object.fromEntries([...before].filter(([, bytes]) => bytes !== undefined).map(([name, bytes]) => [name, digest(bytes)]));
-    const identity = { workspace: root, commit, selector, pnpmVersion, sourceHashes, manifestHashes };
+    const identity = { workspace: root, commit, ...(selector === undefined ? { roots: requestedImporters } : { selector }), pnpmVersion, sourceHashes, manifestHashes };
     const artifact = join(state, "selections", digest(json(identity)));
     await mkdir(artifact, { recursive: true });
     const scopedLock = projectSelectedWorkspaceLock({ lockfile: sourceLock, importerIds, workspace: root, lockfileDirectory: artifact, filterLockfileByImporters });
     await writeWantedLockfile(artifact, scopedLock);
     assert.deepEqual(await readWantedLockfile(artifact, { ignoreIncompatible: false }), scopedLock, "selected lock failed semantic round trip");
     const scopedBytes = await readFile(join(artifact, "pnpm-lock.yaml"));
-    const command = [...storeArgs, "--lockfile-dir=" + artifact, ...workspaceArgs, "install", "--filter", selector, "--frozen-lockfile", "--ignore-scripts"];
+    const command = [...storeArgs, "--lockfile-dir=" + artifact, ...workspaceArgs, "install", ...(selector === undefined ? [] : ["--filter", selector]), "--frozen-lockfile", "--ignore-scripts"];
     receipt = {
       type: "NodeRuntimeWorkspaceSelectionInstallReceipt", version: 1, ...identity,
-      recordedAt: new Date().toISOString(), artifact, tooling, importerIds,
+      recordedAt: new Date().toISOString(), artifact, tooling, importerIds, sourceMounts, selectionElapsedMilliseconds: Date.now() - startedAt,
       sourceImporterCount: Object.keys(sourceLock.importers).length,
       selectedPackageSnapshots: Object.keys(scopedLock.packages ?? {}).length,
       sourcePackageSnapshots: Object.keys(sourceLock.packages ?? {}).length,
@@ -185,6 +275,7 @@ export async function installWorkspaceSelection({
     }
     for (const [name, bytes] of before) assert.deepEqual(await optionalBytes(join(root, name)), bytes, "source configuration changed: " + name);
     for (const [id, hash] of Object.entries(manifestHashes)) assert.equal(digest(await readFile(join(root, id, "package.json"))), hash, "source manifest changed: " + id);
+    assert.equal((await git("rev-parse", "HEAD")).trim(), commit, "source revision changed during installation");
     receipt.sourceConfigurationUnchanged = true;
     await writeFile(receiptPath, json(receipt));
     return { ...receipt, receiptPath };

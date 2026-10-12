@@ -100,7 +100,9 @@ export async function runWorkspaceSelection({ receipt, arguments: args, environm
   // `run` does not expose install's --lockfile-dir CLI flag; the maintained
   // pnpm config namespace carries this same setting across both commands.
   const command = ["--config.lockfile-dir=" + receipt.artifact, ...scope, ...args];
-  await execute(receipt.executable, command, { cwd: root, environment, onOutput });
+  const bins = await sourceBinModes(root, receipt.importerIds);
+  try { await execute(receipt.executable, command, { cwd: root, environment, onOutput }); }
+  finally { await preserveSourceBinModes(bins); }
   await verify();
   return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,
     executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true };

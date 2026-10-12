@@ -142,7 +142,17 @@ async function materializeSelectedSources({ root, importerIds, environment, onOu
   const sparse = await git(root, "config", "--bool", "core.sparseCheckout").catch((error) => {
     if (error.exitCode === 1) return "false"; throw error;
   });
-  if (sparse.trim() === "true") await git(root, "sparse-checkout", "add", "--skip-checks", "--", ...importerIds.filter((id) => id !== "."));
+  if (sparse.trim() === "true") {
+    // Root-owned instance data and agency carriers are package files too. A
+    // source selection which keeps only nested importers silently drops them.
+    const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+    const assets = (manifest.files ?? []).filter(path => typeof path === "string" && !path.startsWith("!"))
+      .map(path => path.split(/[?*[{]/u, 1)[0].replace(/\/$/u, ""));
+    for (const asset of assets) {
+      if (!asset || !contained(root, resolve(root, asset))) throw new Error("root package files require bounded paths within the selected checkout");
+    }
+    await git(root, "sparse-checkout", "add", "--skip-checks", "--", ...importerIds.filter(id => id !== "."), ...assets);
+  }
   const mounts = [];
   async function receive(repository, paths) {
     const hasModules = await git(repository, "ls-tree", "HEAD", "--", ".gitmodules");

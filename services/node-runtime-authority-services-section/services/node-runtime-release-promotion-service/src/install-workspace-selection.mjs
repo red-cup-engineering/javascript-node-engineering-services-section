@@ -42,6 +42,42 @@ async function optionalBytes(file) {
   catch (error) { if (error.code === "ENOENT") return undefined; throw error; }
 }
 
+/** Reuse the frozen installation's scope for its actual generation or packing command. */
+export async function runWorkspaceSelection({ receipt, arguments: args, environment = process.env, onOutput } = {}) {
+  if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
+      || receipt.status !== "installed" || receipt.sourceConfigurationUnchanged !== true) {
+    throw new TypeError("an installed, unchanged workspace selection is required");
+  }
+  if (!Array.isArray(args) || !args.length || args.some(arg => typeof arg !== "string" || !arg || arg.includes("\0"))) {
+    throw new TypeError("pnpm arguments are required");
+  }
+  if (args.some(arg => /^(?:--(?:config\.)?(?:workspace-packages|lockfile-dir|dir)|-C)(?:=|$)/u.test(arg))) {
+    throw new TypeError("a consumer command cannot replace the selected source or lock scope");
+  }
+  const root = await realpath(receipt.workspace);
+  const verify = async () => {
+    assert.equal((await execute("git", ["-C", root, "rev-parse", "HEAD"], { environment })).trim(), receipt.commit,
+      "selected source revision changed");
+    assert.equal(digest(await readFile(join(receipt.artifact, "pnpm-lock.yaml"))), receipt.scopedLockSha256,
+      "selected frozen lock changed");
+    for (const [name, hash] of Object.entries(receipt.sourceHashes)) {
+      assert.equal(digest(await readFile(join(root, name))), hash, "source configuration changed: " + name);
+    }
+    for (const [id, hash] of Object.entries(receipt.manifestHashes)) {
+      assert.equal(digest(await readFile(join(root, id, "package.json"))), hash, "selected manifest changed: " + id);
+    }
+  };
+  await verify();
+  const scope = receipt.importerIds.filter(id => id !== ".").map(id => "--workspace-packages=" + id);
+  // `run` does not expose install's --lockfile-dir CLI flag; the maintained
+  // pnpm config namespace carries this same setting across both commands.
+  const command = ["--config.lockfile-dir=" + receipt.artifact, ...scope, ...args];
+  await execute(receipt.executable, command, { cwd: root, environment, onOutput });
+  await verify();
+  return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,
+    executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true };
+}
+
 /** Select source importers by following committed links, without discovering unrelated projects. */
 export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace }) {
   if (String(lockfile?.lockfileVersion) !== "9.0") throw new Error("selected install requires a pnpm v9 lockfile");

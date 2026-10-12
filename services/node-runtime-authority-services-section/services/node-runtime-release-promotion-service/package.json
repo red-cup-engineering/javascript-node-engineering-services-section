@@ -19,7 +19,8 @@
     "materialize-node-runtime-release": "./scripts/materialize-node-runtime-release.mjs",
     "release-git-commit": "./scripts/release-git-commit.mjs",
     "install-workspace-selection": "./scripts/install-workspace-selection.mjs",
-    "reconcile-node-release": "./scripts/reconcile-node-release.mjs"
+    "reconcile-node-release": "./scripts/reconcile-node-release.mjs",
+    "run-workspace-selection": "./scripts/run-workspace-selection.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"

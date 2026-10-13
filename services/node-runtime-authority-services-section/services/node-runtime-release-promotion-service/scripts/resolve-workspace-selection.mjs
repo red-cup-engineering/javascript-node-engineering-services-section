@@ -52,6 +52,14 @@ for (const id of ids) {
     if (version.startsWith("workspace:") && !names.has(name)) throw new TypeError("selected composition lacks " + name + " required by " + manifest.name);
   }
 }
+// An unchanged installed demand already has a frozen pnpm receiving receipt.
+// Avoid mutable resolution, network discovery and a source write for that case.
+if(!planned&&flags.sourceLock===undefined&&flags.importers.every(id=>previous.importerIds.includes(id))){
+  process.stdout.write(JSON.stringify({type:'NodeRuntimeWorkspaceSelectionResolution',version:1,workspace:root,
+    importerIds:ids,lockOwner:'pnpm',sourceConfigurationUnchanged:true,resolutionRequired:false,
+    applicationExecuted:false})+'\n');
+  process.exit(0);
+}
 const command = [...ids.map(id => "--workspace-packages="+id), ...exactImporterFilterArgs(ids), "install", "--lockfile-only", "--no-frozen-lockfile", "--ignore-scripts", "--prefer-offline"];
 const child = spawn(previous.executable, command, {cwd:root, env:process.env, stdio:["ignore", "pipe", "pipe"]});
 child.stdout.on("data", chunk => process.stderr.write(chunk));

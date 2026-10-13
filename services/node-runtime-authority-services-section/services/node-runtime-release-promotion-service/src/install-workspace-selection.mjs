@@ -137,7 +137,7 @@ export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace 
 }
 
 /** Materialize only recorded Gitlinks containing selected source paths; never advance existing mounts. */
-async function materializeSelectedSources({ root, importerIds, environment, onOutput }) {
+export async function materializeSelectedSources({ root, importerIds, environment, onOutput }) {
   const git = (cwd, ...args) => execute("git", args, { cwd, environment });
   const sparse = await git(root, "config", "--bool", "core.sparseCheckout").catch((error) => {
     if (error.exitCode === 1) return "false"; throw error;

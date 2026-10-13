@@ -28,7 +28,8 @@
   },
   "dependencies": {
     "esbuild": "0.28.1",
-    "@red-cup-engineering/computer-content-address-engineering-services-section": "workspace:*"
+    "@red-cup-engineering/computer-content-address-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/node-job-service": "workspace:*"
   },
   "engines": {
     "node": ">=22.18"

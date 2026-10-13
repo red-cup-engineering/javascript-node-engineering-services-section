@@ -615,8 +615,8 @@ export async function installWorkspaceSelection({
   let receiptPath;
   try {
     const runPnpm = (args, cwd = root, output) => execute(pnpm, args, { cwd, environment, onOutput: output });
-    const bootstrapVersion = (await runPnpm(["--manage-package-manager-versions=false", "--version"])).trim();
-    const bootstrap = { executable: pnpm, version: bootstrapVersion };
+    const bootstrapVersion = (await runPnpm(["--pm-on-fail=ignore", "--version"])).trim();
+    const bootstrap = { executable: pnpm, version: bootstrapVersion, pmOnFail: "ignore" };
     const version = /^(\d+)\.(\d+)\.(\d+)/u.exec(bootstrapVersion);
     if (!version || Number(version[1]) < 11 || (Number(version[1]) === 11 && Number(version[2]) < 19)) {
       throw new Error("selected install requires pnpm 11.19 or newer, without downgrading or disabling policy checks");
@@ -624,7 +624,7 @@ export async function installWorkspaceSelection({
     const policies = {};
     for (let offset = 0; offset < policyNames.length; offset += 4) {
       const values = await Promise.all(policyNames.slice(offset, offset + 4).map(async (name) =>
-        [name, (await runPnpm(["--manage-package-manager-versions=false", "config", "get", name, "--json"])).trim()]));
+        [name, (await runPnpm(["--pm-on-fail=ignore", "config", "get", name, "--json"])).trim()]));
       for (const [name, value] of values) if (value) policies[name] = JSON.parse(value);
     }
     // The bootstrap uses only official, pinned pnpm packages and its own frozen lock.
@@ -638,7 +638,7 @@ export async function installWorkspaceSelection({
     await writeFile(join(tooling, "pnpm-lock.yaml"), toolLock);
     await writeFile(join(tooling, "pnpm-workspace.yaml"), toolWorkspace);
     const storeArgs = storeDirectory ? ["--store-dir=" + resolve(storeDirectory)] : [];
-    await runPnpm(["--manage-package-manager-versions=false", ...storeArgs, "install", "--frozen-lockfile", "--ignore-scripts"], tooling, onOutput);
+    await runPnpm(["--pm-on-fail=ignore", ...storeArgs, "install", "--frozen-lockfile", "--ignore-scripts"], tooling, onOutput);
     assert.deepEqual(await readFile(join(tooling, "pnpm-lock.yaml")), toolLock, "toolchain frozen lock changed");
     // The package manager is a frozen official supplier, not an ambient global
     // executable. PNPM 11.28.5 carries upstream inactivity-timeout and portable

@@ -49,10 +49,11 @@ async function sourceBinModes(root, importerIds) {
     const manifest = JSON.parse(await readFile(join(root, id, "package.json"), "utf8"));
     const entries = typeof manifest.bin === "string" ? [manifest.bin] : Object.values(manifest.bin ?? {});
     if (entries.length) {
-      // A superrepo pathspec does not inspect files beneath a gitlink. Refuse
-      // dirty source at the actual package before preserving its bin modes.
-      const changed = await execute("git", ["-C", join(root, id), "status", "--porcelain=v1",
-        "--untracked-files=no", "--ignore-submodules=none", "--", "."]);
+      // Inspect the actual bin carriers in their owning repository. A broad
+      // parent status also reports unrelated untracked historical submodules.
+      if (entries.some(entry => typeof entry !== "string" || !entry)) throw new TypeError("source bin must name its file");
+      const changed = await execute("git", ["--literal-pathspecs", "-C", join(root, id), "status", "--porcelain=v1",
+        "--untracked-files=no", "--ignore-submodules=none", "--", ...entries]);
       if (changed.trim()) sourceChanges.push({importerId: id, changes: changed.trim()});
     }
     for (const entry of entries) {

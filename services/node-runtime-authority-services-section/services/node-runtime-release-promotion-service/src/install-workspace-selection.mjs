@@ -121,6 +121,19 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
       || receipt.status !== "installed" || receipt.sourceConfigurationUnchanged !== true) {
     throw new TypeError("an installed, unchanged workspace selection is required");
   }
+  if (receipt.packageManager !== undefined) {
+    const manager = receipt.packageManager;
+    if (await realpath(manager.root) !== manager.root || !contained(await realpath(receipt.tooling), manager.root)) {
+      throw new Error("selected package manager is redirected or leaves its frozen toolchain");
+    }
+    assert.deepEqual(Object.keys(manager.files).sort(), ["bin/pnpm.mjs", "dist/pnpm.mjs", "package.json"]);
+    for (const [path, hash] of Object.entries(manager.files)) {
+      await regularSourceFile(manager.root, path);
+      assert.equal(digest(await readFile(join(manager.root, path))), hash, "selected package manager changed: " + path);
+    }
+    assert.equal(receipt.executable, join(manager.root, "bin/pnpm.mjs"));
+    assert.equal(receipt.pnpmVersion, manager.version);
+  }
   const root = await realpath(receipt.workspace);
   if (root !== resolve(receipt.workspace)) throw new Error("selected source root is redirected");
   // Establish the source-file boundary before the verifier's first byte read.
@@ -602,15 +615,16 @@ export async function installWorkspaceSelection({
   let receiptPath;
   try {
     const runPnpm = (args, cwd = root, output) => execute(pnpm, args, { cwd, environment, onOutput: output });
-    const pnpmVersion = (await runPnpm(["--version"])).trim();
-    const version = /^(\d+)\.(\d+)\.(\d+)/u.exec(pnpmVersion);
+    const bootstrapVersion = (await runPnpm(["--manage-package-manager-versions=false", "--version"])).trim();
+    const bootstrap = { executable: pnpm, version: bootstrapVersion };
+    const version = /^(\d+)\.(\d+)\.(\d+)/u.exec(bootstrapVersion);
     if (!version || Number(version[1]) < 11 || (Number(version[1]) === 11 && Number(version[2]) < 19)) {
       throw new Error("selected install requires pnpm 11.19 or newer, without downgrading or disabling policy checks");
     }
     const policies = {};
     for (let offset = 0; offset < policyNames.length; offset += 4) {
       const values = await Promise.all(policyNames.slice(offset, offset + 4).map(async (name) =>
-        [name, (await runPnpm(["config", "get", name, "--json"])).trim()]));
+        [name, (await runPnpm(["--manage-package-manager-versions=false", "config", "get", name, "--json"])).trim()]));
       for (const [name, value] of values) if (value) policies[name] = JSON.parse(value);
     }
     // The bootstrap uses only official, pinned pnpm packages and its own frozen lock.
@@ -624,9 +638,26 @@ export async function installWorkspaceSelection({
     await writeFile(join(tooling, "pnpm-lock.yaml"), toolLock);
     await writeFile(join(tooling, "pnpm-workspace.yaml"), toolWorkspace);
     const storeArgs = storeDirectory ? ["--store-dir=" + resolve(storeDirectory)] : [];
-    await runPnpm([...storeArgs, "install", "--frozen-lockfile", "--ignore-scripts"], tooling, onOutput);
+    await runPnpm(["--manage-package-manager-versions=false", ...storeArgs, "install", "--frozen-lockfile", "--ignore-scripts"], tooling, onOutput);
     assert.deepEqual(await readFile(join(tooling, "pnpm-lock.yaml")), toolLock, "toolchain frozen lock changed");
+    // The package manager is a frozen official supplier, not an ambient global
+    // executable. PNPM 11.28.5 carries upstream inactivity-timeout and portable
+    // deploy fixes; keep every registry/supply/build policy on the bootstrap.
     const require = createRequire(join(tooling, "package.json"));
+    const managerRoot = await realpath(dirname(require.resolve("pnpm")));
+    if (!contained(tooling, managerRoot)) throw new Error("selected pnpm leaves its frozen toolchain");
+    const packageManager = { version: JSON.parse(toolManifest).dependencies.pnpm, root: managerRoot, files: {} };
+    for (const path of ["package.json", "bin/pnpm.mjs", "dist/pnpm.mjs"]) {
+      await regularSourceFile(managerRoot, path);
+      packageManager.files[path] = digest(await readFile(join(managerRoot, path)));
+    }
+    assert.equal(JSON.parse(await readFile(join(managerRoot, "package.json"), "utf8")).version, packageManager.version);
+    pnpm = join(managerRoot, "bin/pnpm.mjs");
+    const pnpmVersion = (await runPnpm(["--version"], tooling)).trim();
+    assert.equal(pnpmVersion, packageManager.version, "frozen package manager version differs");
+    const declaredManager = JSON.parse(before.get("package.json")).packageManager;
+    if (declaredManager !== undefined) assert.equal(declaredManager, "pnpm@" + pnpmVersion,
+      "source packageManager must select the frozen Code supplier before fabrication");
     const { readWantedLockfile, writeWantedLockfile } = await import(pathToFileURL(require.resolve("@pnpm/lockfile.fs")).href);
     const { filterLockfileByImporters } = await import(pathToFileURL(require.resolve("@pnpm/lockfile.filtering")).href);
     const sourceLock = await readWantedLockfile(root, { ignoreIncompatible: false });
@@ -637,7 +668,7 @@ export async function installWorkspaceSelection({
         assert.equal((await git("rev-parse", "HEAD")).trim(), commit, "source revision changed during selection");
         for (const [name, bytes] of before) assert.deepEqual(await optionalBytes(join(root, name)), bytes, "source configuration changed: " + name);
         return { type: "NodeRuntimeLockedSourceSelection", version: 1, workspace: root, commit,
-          roots: requestedImporters, importerIds, tooling, executable: pnpm, sourceLockSha256: digest(before.get("pnpm-lock.yaml")),
+          roots: requestedImporters, importerIds, tooling, executable: pnpm, pnpmVersion, bootstrap, packageManager, sourceLockSha256: digest(before.get("pnpm-lock.yaml")),
           sourceImporterCount: Object.keys(sourceLock.importers).length, sourceConfigurationUnchanged: true,
           elapsedMilliseconds: Date.now() - startedAt };
       }
@@ -677,7 +708,7 @@ export async function installWorkspaceSelection({
       selectedPackageSnapshots: Object.keys(scopedLock.packages ?? {}).length,
       sourcePackageSnapshots: Object.keys(sourceLock.packages ?? {}).length,
       scopedLockSha256: digest(scopedBytes), toolchainLockSha256: digest(toolLock),
-      executable: pnpm, command, status: "prepared", scriptsIgnored: true,
+      executable: pnpm, command, bootstrap, packageManager, status: "prepared", scriptsIgnored: true,
     };
     receiptPath = join(artifact, "install-receipt.json");
     await writeFile(receiptPath, json(receipt));

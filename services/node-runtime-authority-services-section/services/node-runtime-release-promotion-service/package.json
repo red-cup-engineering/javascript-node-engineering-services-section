@@ -13,7 +13,8 @@
     "./integrate": "./src/integrate.mjs",
     "./service": "./src/node-service.mjs",
     "./source-delivery": "./src/source-delivery.mjs",
-    "./compile-node-runtime": "./src/compile-node-runtime.mjs"
+    "./compile-node-runtime": "./src/compile-node-runtime.mjs",
+    "./workspace-lockfile": "./src/workspace-lockfile.mjs"
   },
   "bin": {
     "promote-node-runtime-release": "./scripts/promote-node-runtime-release.mjs",
@@ -22,7 +23,8 @@
     "install-workspace-selection": "./scripts/install-workspace-selection.mjs",
     "reconcile-node-release": "./scripts/reconcile-node-release.mjs",
     "run-workspace-selection": "./scripts/run-workspace-selection.mjs",
-    "compile-node-runtime": "./scripts/compile-node-runtime.mjs"
+    "compile-node-runtime": "./scripts/compile-node-runtime.mjs",
+    "qualify-workspace-lockfile": "./scripts/qualify-workspace-lockfile.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"

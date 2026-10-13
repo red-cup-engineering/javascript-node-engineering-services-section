@@ -9,7 +9,7 @@ import { join } from "node:path";
 import {
   commitTreeSync, derivedCommit, entryAt, git, gitSync, gitText, gitTextSync, isAncestor, replaceInTree, replaceInTreeSync, treeOf, treeOfSync, writeBlob, writeBlobSync,
 } from "./git-objects.mjs";
-import { LOCKFILE, deriveWorkspaceLockfile } from "./workspace-lockfile.mjs";
+import { LOCKFILE, qualifyWorkspaceLockfile } from "./workspace-lockfile.mjs";
 import { releaseClaim } from "./claims.mjs";
 import { EMPTY_WITNESS_ROOT, identifyJsonSemanticContent } from "@red-cup-engineering/computer-content-address-engineering-services-section/semantic-content-identity";
 
@@ -247,7 +247,9 @@ export async function absorbOutsideMain({ repository, base, now, commit }) {
  */
 export async function deriveIntegration({ repository, base, head, lockfile }) {
   if (!lockfile?.derive) return { commit: head, derived: [] };
-  const { lockfile: bytes, changed } = await deriveWorkspaceLockfile({ repository, commit: head, derive: lockfile.derive });
+  if (lockfile.path !== undefined && lockfile.path !== LOCKFILE) throw new TypeError("workspace lock qualification owns pnpm-lock.yaml only");
+  const { lockfile: bytes, changed } = await qualifyWorkspaceLockfile({ repository, commit: head,
+    derive: lockfile.derive, install: lockfile.install, stateDirectory: lockfile.stateDirectory, home: lockfile.home });
   if (!changed) return { commit: head, derived: [] };
   const path = lockfile.path ?? LOCKFILE;
   const tree = await replaceInTree(repository, await treeOf(repository, head), { [path]: { mode: "100644", object: await writeBlob(repository, bytes) } });
@@ -328,3 +330,4 @@ export function setSuspects(queueRoot, keys) {
 /** A failed batch's two halves, in queue order. */
 export const halves = (keys) => [keys.slice(0, Math.ceil(keys.length / 2)), keys.slice(Math.ceil(keys.length / 2))];
 export const candidateKey = (candidate) => verdictKey(candidate.name, candidate.commit);
+

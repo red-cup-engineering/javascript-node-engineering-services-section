@@ -141,6 +141,46 @@ selected lock must never replace the repository's full lock.
 
 ## Independently scoped source receiving
 
+### Receive manifest changes before source integration
+
+`qualify-workspace-lockfile --repository <checkout> --commit <source> --spec-in-commit <release-spec> --state-dir <outside-source>`
+uses the existing committed-manifest owner. It reads the source's release declaration,
+derives the complete workspace lock with that declaration's package-manager command,
+then runs its frozen install step with `--lockfile-only --ignore-scripts` against
+the exact derived lock and unchanged manifest projection. Only the frozen-received
+bytes can enter `deriveIntegration`. The package manager still owns dependency
+resolution and its policies. A source hook that the manifest projection cannot carry
+is refused. No hand-authored lock patch is treated as a received resolution.
+
+`--plan-only` lists the immutable source manifest/blob identities without
+bootstrapping packages, checking out bodies, fetching missing mounts or running
+the resolver. Missing local source objects are an explicit obstruction. Qualification
+retains the existing owner's missing-object fetch behavior; it does not initialize
+unrelated runtime checkouts or execute application source.
+
+The integration queue automatically supplies the real release install declaration
+and keeps derived candidates in its existing queue state. The CLI retains them in
+the explicit external state directory. A retry after a receiving failure reuses
+the identity-bound derived lock, but always repeats frozen receiving in a fresh
+source projection. Different source inputs, command arguments or executable/explicit
+JavaScript entry bytes select a different artifact; modified retained bytes,
+redirected files, changed source inputs and a competing qualification lease are
+refused. Retained candidate metadata is derived cache evidence, never authority or
+acceptance. The same kernel-flock lifetime used by release promotion releases the
+lease when the controller dies. A busy/lost lease or signaled process leaves source
+work pending, rather than refusing its candidate. Atomic single-record cache
+publication cannot expose mismatched lock/input pairs. `--rederive` explicitly
+re-resolves after changed external configuration or a repaired supplier; changing
+the executable bytes also invalidates reuse automatically. The operation accepts
+explicit argument arrays or simple quoted invocations, and refuses shell control
+operators/expansions instead of interpreting a fragment of a release command.
+
+The CLI returns the artifact path; its `pnpm-lock.yaml` remains outside source.
+Publishing it still uses the existing source-transformation and independent
+receiving route. This receives the dependency derivation only. Full selected
+installation, LAGOON assembly, Guix build and runtime receiving remain their own
+actual operations and must consume the reviewed source change.
+
 A source delivery declares the original `sourceBase` of its entire intended
 change and its exact source commit. `nameCandidateSync` binds that base, source
 commit, before/after trees and SignStuff semantic identity in the annotated
@@ -208,4 +248,5 @@ After a frozen selected install, use `run-workspace-selection <install-receipt> 
 The programmatic `runWorkspaceSelection` API optionally takes `deployOutput` for the exact selected-root `--filter <name> --config.ignore-scripts=true --config.inject-workspace-packages=true deploy --prod <absolute-output>` invocation. The output must be absent, outside source, and under an existing canonical parent. Generic commands and the CLI keep their existing receipt shape.
 
 After successful execution, the existing command receipt records `produced.directory` and `produced.files`: SHA-256 identities of regular nonredirected `package.json`, `pnpm-lock.yaml`, and optional `pnpm-workspace.yaml`. Optional absence is a null hash. The selection is revalidated after observation; failure returns no successful receipt and leaves partial-output cleanup to the enclosing caller. These are PNPM's observed root products, not a caller-selected inventory. The consumer must compare them before accepting normalized root metadata. They do not prove all generated runtime bodies, dependency semantics, native receiving or activation. The caller retains its existing exclusive source/build lease.
+
 

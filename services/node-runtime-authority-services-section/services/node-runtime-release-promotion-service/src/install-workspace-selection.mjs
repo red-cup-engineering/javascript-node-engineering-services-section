@@ -376,6 +376,21 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         if ((await objects()).some(row => row.endsWith(" blob") && !selectedBlobs.has(row.split(" ")[0]))) throw new Error("selected checkout received blobs outside its package projection; preserve the unreceived carrier");
       }
       assert.equal((await git(target, "rev-parse", "HEAD")).trim(), match[1], "selected mount source changed: " + path);
+      if (materialize && !status.startsWith("-")) {
+        const sparse = await git(target,"config","--bool","core.sparseCheckout").catch(error=>{
+          if(error.exitCode===1)return "false";throw error;
+        });
+        if(sparse.trim()==="true") {
+          const selected=wanted.map(id=>id===path?".":id.slice(path.length+1));
+          if(selected.some(id=>/[\\\r\n\0]/u.test(id)))throw new Error("selected sparse path is not literal");
+          const literal=id=>"/"+id.replace(/([*?\[\] ])/gu,"\\$1");
+          const patterns=selected.includes(".")?["/*"]:["/.gitmodules",...selected.map(id=>literal(id)+"/")];
+          // Extend this recorded source owner; never repin, reset or discard
+          // already received paths when a later selection needs another face.
+          await git(target,"sparse-checkout","add","--no-cone","--",...patterns);
+          assert.equal((await git(target,"rev-parse","HEAD")).trim(),match[1],"sparse expansion changed selected source");
+        }
+      }
       mounts.push({ path: portable(relative(root, target)), revision: match[1] });
       await receive(target, wanted.map((id) => id === path ? "." : id.slice(path.length + 1)));
     }

@@ -202,7 +202,7 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
 }
 
 /** Reuse the frozen installation's scope for its actual generation or packing command. */
-export async function runWorkspaceSelection({ receipt, arguments: args, deployOutput, environment = process.env, onOutput } = {}) {
+export async function runWorkspaceSelection({ receipt, arguments: args, deployOutput, deployImporter, environment = process.env, onOutput } = {}) {
   if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
       || receipt.status !== "installed" || receipt.sourceConfigurationUnchanged !== true) {
     throw new TypeError("an installed, unchanged workspace selection is required");
@@ -214,13 +214,21 @@ export async function runWorkspaceSelection({ receipt, arguments: args, deployOu
     throw new TypeError("a consumer command cannot replace the selected source or lock scope");
   }
   const root = await verifyWorkspaceSelection(receipt, { environment });
-  let output;
+  let output, owner;
   if (deployOutput !== undefined) {
+    if (typeof deployImporter !== "string" || !receipt.importerIds.includes(deployImporter))
+      throw new TypeError("deploy output needs its explicit selected importer");
     if (typeof deployOutput !== "string" || !deployOutput) throw new TypeError("deploy output needs its explicit path");
     output = resolve(deployOutput);
     if (contained(root, output) || await realpath(dirname(output)) !== dirname(output)) throw new Error("deploy output must have a canonical parent outside source");
-    const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-    assert.deepEqual(args, ["--filter", manifest.name, "--config.ignore-scripts=true", "--config.inject-workspace-packages=true", "deploy", "--prod", output], "produced output requires the exact selected deploy invocation");
+    owner = JSON.parse(await readFile(join(root, deployImporter, "package.json"), "utf8"));
+    if (typeof owner.name !== "string" || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u.test(owner.name))
+      throw new TypeError("deploy importer must declare its literal package name");
+    for (const id of receipt.importerIds) {
+      if (id !== deployImporter && JSON.parse(await readFile(join(root, id, "package.json"), "utf8")).name === owner.name)
+        throw new Error("deploy package has competing selected owners: " + owner.name);
+    }
+    assert.deepEqual(args, ["--filter", owner.name, "--config.ignore-scripts=true", "--config.inject-workspace-packages=true", "deploy", "--prod", output], "produced output requires the exact selected deploy invocation");
     try { await lstat(output); throw new Error("deploy output already exists"); } catch (error) { if (error.code !== "ENOENT") throw error; }
   }
   const scope = receipt.importerIds.filter(id => id !== ".").map(id => "--workspace-packages=" + id);
@@ -242,7 +250,10 @@ export async function runWorkspaceSelection({ receipt, arguments: args, deployOu
       if (entry && !entry.isFile()) throw new Error("deploy metadata must be a regular nonredirected file: " + path);
       files.push({ path, sha256: entry ? digest(await readFile(file)) : null });
     }
-    produced = { directory: output, files };
+    const packed = JSON.parse(await readFile(join(output, "package.json"), "utf8"));
+    for (const field of ["name", "version", "exports", "bin", "files"])
+      assert.deepEqual(packed[field], owner[field], "deployed package differs from its selected owner: " + field);
+    produced = { directory: output, importerId: deployImporter, package: owner.name, files };
   }
   await verifyWorkspaceSelection(receipt, { environment });
   return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,

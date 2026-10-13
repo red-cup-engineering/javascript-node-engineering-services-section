@@ -47,6 +47,13 @@ async function sourceBinModes(root, importerIds) {
   for (const id of importerIds) {
     const manifest = JSON.parse(await readFile(join(root, id, "package.json"), "utf8"));
     const entries = typeof manifest.bin === "string" ? [manifest.bin] : Object.values(manifest.bin ?? {});
+    if (entries.length) {
+      // A superrepo pathspec does not inspect files beneath a gitlink. Refuse
+      // dirty source at the actual package before preserving its bin modes.
+      const changed = await execute("git", ["-C", join(root, id), "status", "--porcelain=v1",
+        "--untracked-files=no", "--ignore-submodules=none", "--", "."]);
+      if (changed.trim()) throw new Error("source bin package has unreconciled tracked changes: " + id);
+    }
     for (const entry of entries) {
       const file = resolve(root, id, entry);
       if (!contained(root, file)) throw new Error("source bin escapes the selected checkout");

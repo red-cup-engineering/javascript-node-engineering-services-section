@@ -158,11 +158,44 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
     if (!scopes.has(directory)) scopes.set(directory, []);
     scopes.get(directory).push(path);
   }
+  const sourceState = [];
+  let omittedScopes = 0;
+  const observationEnvironment = { ...environment, GIT_OPTIONAL_LOCKS: "0" };
+  const mountIdentity = async mount => {
+    const parent = sourceMounts.filter(row => mount.path.startsWith(row.path + "/"))
+      .sort((a, b) => b.path.length - a.path.length)[0];
+    const parentDirectory = parent ? join(root, parent.path) : root;
+    const path = parent ? mount.path.slice(parent.path.length + 1) : mount.path;
+    return { path: mount.path, recordedCommit: mount.revision,
+      indexGitlink: await execute("git", ["-C", parentDirectory, "ls-files", "--stage", "--", path], { environment: observationEnvironment }),
+      actualCommit: (await execute("git", ["-C", join(root, mount.path), "rev-parse", "HEAD"], { environment: observationEnvironment })).trim() };
+  };
   for (const [directory, paths] of scopes) {
     const changes = await execute("git", ["-C", directory, "status", "--porcelain=v1",
       "--untracked-files=no", "--ignore-submodules=none", "--", ...paths],
-    { environment: { ...environment, GIT_OPTIONAL_LOCKS: "0" } });
-    if (changes.trim()) throw new Error("selected source has tracked changes; receive source or derived output before reuse:\n" + changes.trim());
+    { environment: observationEnvironment });
+    if (!changes.trim()) continue;
+    if (sourceState.length === 8) { omittedScopes++; continue; }
+    // Porcelain v1 collapses nested untracked and tracked changes to M. Keep
+    // its original spacing and expose v2 flags/modes without reading file bodies.
+    const allRecords = (await execute("git", ["-C", directory, "status", "--porcelain=v2", "-z",
+      "--untracked-files=no", "--ignore-submodules=none", "--", ...paths],
+    { environment: observationEnvironment })).split("\0").filter(Boolean);
+    const records = allRecords.slice(0, 24);
+    const scope = portable(relative(root, directory)) || ".";
+    const implicated = sourceMounts.filter(mount => mount.path === scope || records.some(record => {
+      const path = portable(relative(directory, join(root, mount.path)));
+      return record.startsWith("1 ") && record.split(" ")[2]?.startsWith("S") && record.endsWith(" " + path);
+    }));
+    sourceState.push({ scope, porcelainV1: changes.slice(0, 4096), porcelainV1Truncated: changes.length > 4096,
+      porcelainV2: records.map(record => record.slice(0, 1024)), omittedRecords: allRecords.length - records.length,
+      longRecordsTruncated: records.some(record => record.length > 1024),
+      mounts: await Promise.all(implicated.slice(0, 24).map(mountIdentity)), omittedMounts: Math.max(0, implicated.length - 24) });
+  }
+  if (sourceState.length) {
+    const error = new Error("selected source has tracked changes or nested submodule state; receive source or derived output before reuse:\n" + JSON.stringify({ scopes: sourceState, omittedScopes }, null, 2));
+    error.sourceState = sourceState;
+    throw error;
   }
   return root;
 }

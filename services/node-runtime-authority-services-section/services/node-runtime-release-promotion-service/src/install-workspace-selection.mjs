@@ -340,6 +340,16 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         const key = line.slice(0, line.search(/\s/u)).replace(/[.]path$/u, ".url");
         const url = (await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get", key)).trim();
         if (!/^(?:https:\/\/github[.]com\/|git@github[.]com:|ssh:\/\/git@github[.]com\/)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[.]git)?$/u.test(url)) throw new Error("selected mount needs its committed GitHub source URL");
+        // A sparse owner can hold the committed Gitlink without any physical
+        // ancestor directories. Create only that recorded path, checking each
+        // existing ancestor before mkdir can follow a redirected carrier.
+        let parent = repository;
+        for (const part of path.split("/").slice(0, -1)) {
+          parent = join(parent, part);
+          const held = await lstat(parent).catch(error => { if (error.code === "ENOENT") return null; throw error; });
+          if (held && (!held.isDirectory() || held.isSymbolicLink())) throw new Error("selected mount parent is redirected");
+          if (!held) await mkdir(parent);
+        }
         if (await realpath(dirname(target)) !== dirname(target)) throw new Error("selected mount parent is redirected");
         const existing = await lstat(target).catch(error => { if (error.code === "ENOENT") return null; throw error; });
         if (existing && (!existing.isDirectory() || (await readdir(target)).length)) throw new Error("unreceived selected mount holds existing contents; preserve and reconcile it: " + path);
@@ -416,6 +426,49 @@ export function projectSelectedWorkspaceLock({ lockfile, importerIds, workspace,
       lockfile.importers[id],
     ])),
   };
+}
+
+/** Derive only workspace-star demand from actual manifests and existing canonical lock links.
+ * Registry resolution, version selection and whole-lock acceptance remain pnpm-owned. */
+export function deriveWorkspaceOnlyImporter({lockfile, importerId, manifest, providers}) {
+  if (String(lockfile?.lockfileVersion) !== "9.0" || !lockfile.importers || !Array.isArray(providers))
+    throw new TypeError("workspace-only demand requires a pnpm9 lock and source providers");
+  const canonical = path => typeof path === "string" && path && !isAbsolute(path) && !/[\\\0]/u.test(path)
+    && (path === "." || path.split("/").every(part => part && part !== "." && part !== ".."));
+  if (!canonical(importerId) || typeof manifest?.name !== "string") throw new TypeError("canonical importer and manifest required");
+  const importer = {dependencies:undefined, devDependencies:undefined, optionalDependencies:undefined, specifiers:{}}, used = [];
+  for (const field of fields) for (const [name, specifier] of Object.entries(manifest[field] ?? {})) {
+    if (field !== "dependencies" && name in (manifest.dependencies ?? {})) continue;
+    if (specifier !== "workspace:*") throw new TypeError("workspace-only derivation cannot resolve registry or version demand: " + name);
+    const matches = providers.filter(provider => provider.manifest?.name === name);
+    if (matches.length !== 1 || !canonical(matches[0].path) || !lockfile.importers[matches[0].path])
+      throw new Error("workspace demand needs one already-locked source owner: " + name);
+    const provider = matches[0], links = new Set();
+    for (const [path, row] of Object.entries(lockfile.importers)) for (const entries of fields.map(key => row[key] ?? {})) {
+      const entry = entries[name];
+      if (typeof entry === "string" && entry.startsWith("link:"))
+        links.add(portable(relative("/", resolve("/", path, entry.slice(5)))) || ".");
+    }
+    if (links.size !== 1 || !links.has(provider.path)) throw new Error("workspace demand has absent or competing lock owners: " + name);
+    importer.specifiers[name] = specifier;
+    (importer[field] ??= {})[name] = "link:" + (portable(relative(importerId, provider.path)) || ".");
+    used.push({name, path:provider.path});
+  }
+  return {lockfile:{...lockfile, importers:{...lockfile.importers, [importerId]:importer}}, importerId, providers:used,
+    registryResolved:false, frozenReceived:false};
+}
+
+/** Read source lock data through the existing exact, frozen pnpm codec toolchain. */
+export async function readWorkspaceSelectionLock({workspace, tooling}) {
+  const root=await realpath(workspace), tools=await realpath(tooling);
+  if(root!==resolve(workspace)||tools!==resolve(tooling))throw new Error("lock reader source or tooling is redirected");
+  for(const file of ["package.json","pnpm-lock.yaml"])await regularSourceFile(tools,file);
+  assert.deepEqual(await readFile(join(tools,"package.json")),await readFile(join(toolchainSource,"manifest.json")),"lock reader tooling manifest differs");
+  assert.deepEqual(await readFile(join(tools,"pnpm-lock.yaml")),await readFile(join(toolchainSource,"pnpm-lock.yaml")),"lock reader tooling lock differs");
+  await regularSourceFile(root,"pnpm-lock.yaml");
+  const require=createRequire(join(tools,"package.json"));
+  const {readWantedLockfile}=await import(pathToFileURL(require.resolve("@pnpm/lockfile.fs")).href);
+  return readWantedLockfile(root,{ignoreIncompatible:false});
 }
 
 /**

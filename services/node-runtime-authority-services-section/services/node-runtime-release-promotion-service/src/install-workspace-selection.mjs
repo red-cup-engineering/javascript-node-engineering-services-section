@@ -77,7 +77,7 @@ async function preserveSourceBinModes(bins) {
     if (mode !== original.mode) {
       // pnpm links source bins and adds execute bits. Preserve the immutable
       // checkout's modes; deployed copies receive their executable bin modes.
-      if ((mode & ~0o111) !== (original.mode & ~0o111)) throw new Error("source bin permissions changed beyond executable bits: " + file);
+      if ((mode & ~0o111) !== (original.mode & ~0o111)) throw new Error("source bin permissions changed beyond executable bits: " + file + " (before " + original.mode.toString(8).padStart(4, "0") + ", after " + mode.toString(8).padStart(4, "0") + ")");
       await chmod(file, original.mode);
     }
   }

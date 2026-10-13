@@ -13,7 +13,8 @@
     "./integrate": "./src/integrate.mjs",
     "./service": "./src/node-service.mjs",
     "./source-delivery": "./src/source-delivery.mjs",
-    "./compile-node-runtime": "./src/compile-node-runtime.mjs"
+    "./compile-node-runtime": "./src/compile-node-runtime.mjs",
+    "./generate-workspace-typescript": "./src/generate-workspace-typescript.mjs"
   },
   "bin": {
     "promote-node-runtime-release": "./scripts/promote-node-runtime-release.mjs",

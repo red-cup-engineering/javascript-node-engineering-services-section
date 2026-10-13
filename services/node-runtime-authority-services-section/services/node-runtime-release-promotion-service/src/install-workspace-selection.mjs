@@ -58,8 +58,13 @@ async function sourceBinModes(root, importerIds) {
     for (const entry of entries) {
       const file = resolve(root, id, entry);
       if (!contained(root, file)) throw new Error("source bin escapes the selected checkout");
-      const bytes = await optionalBytes(file);
-      if (bytes !== undefined) bins.set(file, { mode: (await stat(file)).mode & 0o777, hash: digest(bytes) });
+      const path = portable(relative(root, file));
+      // Check every ancestor and the declared target before its first byte read.
+      // Missing generated bins retain the existing optional-input behavior.
+      try { await regularSourceFile(root, path); }
+      catch (error) { if (error.cause?.code === "ENOENT") continue; throw error; }
+      const bytes = await readFile(file);
+      bins.set(file, { root, path, mode: (await stat(file)).mode & 0o777, hash: digest(bytes) });
     }
   }
   if (sourceChanges.length) {
@@ -72,12 +77,16 @@ async function sourceBinModes(root, importerIds) {
 
 async function preserveSourceBinModes(bins) {
   for (const [file, original] of bins) {
+    if (await realpath(original.root) !== original.root) throw new Error("source bin root is redirected");
+    await regularSourceFile(original.root, original.path);
     assert.equal(digest(await readFile(file)), original.hash, "source bin changed during installation: " + file);
     const mode = (await stat(file)).mode & 0o777;
     if (mode !== original.mode) {
-      // pnpm links source bins and adds execute bits. Preserve the immutable
-      // checkout's modes; deployed copies receive their executable bin modes.
-      if ((mode & ~0o111) !== (original.mode & ~0o111)) throw new Error("source bin permissions changed beyond executable bits: " + file + " (before " + original.mode.toString(8).padStart(4, "0") + ", after " + mode.toString(8).padStart(4, "0") + ")");
+      // PNPM 11.19's bin linker sets exactly 0755, including non-execute bits.
+      // Receive only that known normalization (or the existing execute-only
+      // change) on unchanged regular declared bins, then restore source custody.
+      if (mode !== 0o755 && (mode & ~0o111) !== (original.mode & ~0o111)) throw new Error("source bin permissions changed beyond executable bits: " + file + " (before " + original.mode.toString(8).padStart(4, "0") + ", after " + mode.toString(8).padStart(4, "0") + ")");
+      await regularSourceFile(original.root, original.path);
       await chmod(file, original.mode);
     }
   }

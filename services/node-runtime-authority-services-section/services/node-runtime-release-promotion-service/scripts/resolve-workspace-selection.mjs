@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync, realpathSync, existsSync, lstatSync } from "node:fs";
-import { resolve, relative, join, isAbsolute } from "node:path";
+import { resolve, relative, join, isAbsolute, matchesGlob } from "node:path";
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
@@ -27,22 +27,45 @@ if (planned) {
   const commit=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
   if(commit!==previous.commit||createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex')!==previous.sourceLockSha256)throw new Error('locked source plan differs from its exact committed input');
   const locked=await readWorkspaceSelectionLock({workspace:root,tooling:previous.tooling});
-  ids=selectLockedWorkspaceClosure({lockfile:locked,importerIds:ids,workspace:root});
+  // An authored provider may have no historical importer yet. Follow existing
+  // locked edges, and keep new demand for exact-source manifest receiving below.
+  const lockedClosure=inputs=>[...new Set([...selectLockedWorkspaceClosure({lockfile:locked,
+    importerIds:inputs.filter(id=>Object.hasOwn(locked.importers,id)),workspace:root}),...inputs])].sort();
+  ids=lockedClosure(ids);
   let mounts=await receiveSelectedSources({root,importerIds:ids,materialize:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
-  // Current authored manifests govern workspace demand. A historical lock is
-  // resolver input and cannot omit a newly declared supplier. Read only package
-  // metadata at its known importer paths in already received source carriers;
-  // PNPM still resolves every version/peer/integrity below, never a joined lock.
+  // Current authored manifests govern demand; the old lock is resolution input.
+  // New package owners are discovered from the committed source objects in
+  // received mounts, under the authored PNPM workspace patterns. Only demanded
+  // owner bodies are materialized. PNPM derives every new importer below.
+  const workspacePatterns=JSON.parse(execFileSync(previous.executable,['config','get','packages','--json'],{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe']}));
+  if(!Array.isArray(workspacePatterns)||workspacePatterns.some(pattern=>typeof pattern!=='string'))throw new Error('source workspace must declare package patterns');
+  const workspaceOwner=id=>id==='.'||(workspacePatterns.some(pattern=>!pattern.startsWith('!')&&matchesGlob(id,pattern))
+    &&!workspacePatterns.some(pattern=>pattern.startsWith('!')&&matchesGlob(id,pattern.slice(1))));
+  const committedCandidates=()=>{
+    const found=new Set(Object.keys(locked.importers).filter(workspaceOwner));
+    for(const source of [{path:'.',revision:previous.commit},...mounts]){
+      const repository=source.path==='.'?root:resolve(root,source.path);
+      const files=execFileSync('git',['-c','core.hooksPath=/dev/null','-C',repository,'ls-tree','-r','-z','--name-only',source.revision],{encoding:'utf8',maxBuffer:32*1024*1024,stdio:['ignore','pipe','pipe']});
+      for(const file of files.split('\0').filter(file=>file==='package.json'||file.endsWith('/package.json'))){
+        const id=relative(root,resolve(repository,dirname(file))).split('\\').join('/')||'.';
+        if(workspaceOwner(id))found.add(id);
+      }
+    }
+    return [...found].sort();
+  };
   const readOwnedManifest=(id)=>{
     const file=resolve(root,id,'package.json');
     const offset=relative(root,file);if(isAbsolute(offset)||offset==='..'||offset.startsWith('../')||typeof id!=='string'||id.includes('\0'))throw new Error('provider metadata leaves the selected source root');
-    if(!existsSync(file))return undefined;
-    if(!lstatSync(file).isFile()||realpathSync(file)!==file)throw new Error('provider manifest is redirected: '+id);
+    if(!workspaceOwner(id))throw new Error('provider is outside authored workspace patterns: '+id);
+    if(existsSync(file)&&(!lstatSync(file).isFile()||realpathSync(file)!==file))throw new Error('provider manifest is redirected: '+id);
     const source=[{path:'.',revision:previous.commit},...mounts].filter(row=>row.path==='.'||id===row.path||id.startsWith(row.path+'/')).sort((a,b)=>b.path.length-a.path.length)[0];
     const repository=source.path==='.'?root:resolve(root,source.path),path=relative(repository,file);
-    let committed;try{committed=execFileSync('git',['-c','core.hooksPath=/dev/null','-C',repository,'show',source.revision+':'+path],{env:{...process.env,GIT_NO_LAZY_FETCH:'1'},stdio:['ignore','pipe','ignore']});}catch{return undefined;}
-    const bytes=readFileSync(file);if(!bytes.equals(committed))throw new Error('provider manifest differs from exact received source: '+id);
-    return JSON.parse(bytes);
+    const entry=execFileSync('git',['-c','core.hooksPath=/dev/null','-C',repository,'ls-tree',source.revision,'--',path],{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+    if(!entry)return undefined;
+    if(!/^(100644|100755) blob [a-f0-9]{40}\t/u.test(entry))throw new Error('provider metadata must be a committed regular file: '+id);
+    const committed=execFileSync('git',['-c','core.hooksPath=/dev/null','-C',repository,'show',source.revision+':'+path],{stdio:['ignore','pipe','pipe']});
+    if(existsSync(file)&&!readFileSync(file).equals(committed))throw new Error('provider manifest differs from exact received source: '+id);
+    return JSON.parse(committed);
   };
   for(;;){
     const selected=ids.map(id=>({id,manifest:readOwnedManifest(id)})),names=new Set(selected.map(row=>row.manifest?.name)),missing=new Set();
@@ -50,10 +73,10 @@ if (planned) {
     for(const {manifest}of selected)for(const field of ['dependencies','devDependencies','optionalDependencies'])for(const[name,version]of Object.entries(manifest[field]??{}))if(version.startsWith('workspace:')&&!names.has(name))missing.add(name);
     if(!missing.size)break;
     const candidates=new Map([...missing].map(name=>[name,[]]));
-    for(const id of Object.keys(locked.importers)){if(ids.includes(id))continue;const manifest=readOwnedManifest(id);if(candidates.has(manifest?.name))candidates.get(manifest.name).push(id);}
+    for(const id of committedCandidates()){if(ids.includes(id))continue;const manifest=readOwnedManifest(id);if(candidates.has(manifest?.name))candidates.get(manifest.name).push(id);}
     const additions=[];
     for(const[name,paths]of candidates){if(paths.length!==1)throw new Error('current workspace demand needs one received provider for '+name+': '+paths.length);additions.push(paths[0]);}
-    ids=selectLockedWorkspaceClosure({lockfile:locked,importerIds:[...ids,...additions],workspace:root});
+    ids=lockedClosure([...ids,...additions]);
     mounts=await receiveSelectedSources({root,importerIds:ids,materialize:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
   }
 }

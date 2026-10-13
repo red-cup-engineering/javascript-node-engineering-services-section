@@ -7,6 +7,10 @@ import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { receiveSelectedSources, selectLockedWorkspaceClosure, readWorkspaceSelectionLock, verifyWorkspaceSelection, exactImporterFilterArgs } from "../src/install-workspace-selection.mjs";
+const producerFile=fileURLToPath(import.meta.url),producerRoot=execFileSync('git',['-C',dirname(producerFile),'rev-parse','--show-toplevel'],{encoding:'utf8'}).trim();
+const producerCommit=execFileSync('git',['-C',producerRoot,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),producerPath=relative(producerRoot,producerFile);
+const producerBytes=readFileSync(producerFile),committedProducer=execFileSync('git',['-C',producerRoot,'show',producerCommit+':'+producerPath]);
+if(!producerBytes.equals(committedProducer))throw new Error('source resolver differs from its committed producer');
 const args = process.argv.slice(2), flags = { importers: [] };
 for (let at = 0; at < args.length; at += 2) {
   if (!["--receipt", "--importer", "--source-lock"].includes(args[at]) || !args[at+1]) throw new TypeError("resolve-workspace-selection --receipt <installed receipt> [--importer <new project>...] [--source-lock <upstream lock>]");
@@ -93,10 +97,7 @@ child.stdout.on("data", chunk => process.stderr.write(chunk));
 child.stderr.on("data", chunk => process.stderr.write(chunk));
 const code = await new Promise((accept,reject) => {child.on("error",reject);child.on("exit",accept);});
 if (code !== 0) throw new Error("pnpm could not resolve the selected composition: " + code);
-const producerFile=fileURLToPath(import.meta.url),producerRoot=execFileSync('git',['-C',dirname(producerFile),'rev-parse','--show-toplevel'],{encoding:'utf8'}).trim();
-const producerCommit=execFileSync('git',['-C',producerRoot,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),producerPath=relative(producerRoot,producerFile);
-const producerBytes=readFileSync(producerFile),committedProducer=execFileSync('git',['-C',producerRoot,'show',producerCommit+':'+producerPath]);
-if(!producerBytes.equals(committedProducer))throw new Error('source resolver differs from its committed producer');
+if(!readFileSync(producerFile).equals(producerBytes))throw new Error('source resolver changed during resolution');
 process.stdout.write(JSON.stringify({type:"NodeRuntimeWorkspaceSelectionResolution",version:1,workspace:root,importerIds:ids,lockOwner:"pnpm",applicationExecuted:false,
  inputCommit:previous.commit,inputSourceLockSha256:previous.sourceLockSha256??previous.sourceHashes['pnpm-lock.yaml'],resolvedSourceLockSha256:createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex'),
  producer:{repository:'red-cup-engineering/computer-code-engineering-services-section',commit:producerCommit,path:producerPath,sha256:createHash('sha256').update(producerBytes).digest('hex')}})+"\n");

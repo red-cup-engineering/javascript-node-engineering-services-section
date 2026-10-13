@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const toolchainSource = resolve(dirname(fileURLToPath(import.meta.url)), "../data/selected-install-tools");
 const fields = ["dependencies", "devDependencies", "optionalDependencies"];
 const policyNames = [
+  "registry",
   "minimumReleaseAge", "minimumReleaseAgeExclude", "minimumReleaseAgeIgnoreMissingTime",
   "minimumReleaseAgeStrict", "trustPolicy", "trustPolicyExclude", "trustPolicyIgnoreAfter",
   "trustLockfile", "blockExoticSubdeps", "verifyStoreIntegrity", "strictStorePkgContentCheck",
@@ -257,7 +258,8 @@ export async function runWorkspaceSelection({ receipt, arguments: args, deployOu
   }
   await verifyWorkspaceSelection(receipt, { environment });
   return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,
-    executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true, ...(produced ? { produced } : {}) };
+    executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true,
+    ...(produced ? { produced } : {}) };
 }
 
 /** Match only the lock-selected importer directories in pnpm's own project filter.
@@ -313,6 +315,7 @@ function selectedSourceProjection(tree, selected) {
   const literal = id => "/" + id.replace(/([*?\[\] ])/gu, "\\$1");
   const patterns = selected.includes(".") ? ["/*"] : ["/.gitmodules", ...selected.map(id => literal(id) + "/")];
   const blobs = new Set();
+  const policies = [];
   for (const row of tree.split("\0").filter(Boolean)) {
     const tab = row.indexOf("\t"), [mode, type, oid] = row.slice(0, tab).split(" "), file = row.slice(tab + 1);
     const parent = portable(dirname(file));
@@ -321,11 +324,12 @@ function selectedSourceProjection(tree, selected) {
     if (attributes) {
       if (mode !== "100644" && mode !== "100755") throw new Error("selected checkout attributes are not regular recorded source: " + file);
       patterns.push(literal(file));
+      policies.push({ path: file, gitBlob: oid });
     }
     if (mode === "160000" && selected.some(id => id === file || id.startsWith(file + "/"))) patterns.push(literal(file));
     if (type === "blob" && (attributes || file === ".gitmodules" || selected.includes(".") || selected.some(id => file.startsWith(id + "/")))) blobs.add(oid);
   }
-  return { patterns: [...new Set(patterns)], blobs };
+  return { patterns: [...new Set(patterns)], blobs, attributes: policies };
 }
 
 /** Receive recorded selected Gitlinks; acquisition is allowed only during requested installation. */
@@ -346,6 +350,15 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
     await git(root, "sparse-checkout", "add", "--skip-checks", "--", ...importerIds.filter(id => id !== "."), ...assets);
   }
   const mounts = [];
+  async function receiveAttributes(repository, paths) {
+    const { attributes } = selectedSourceProjection(await git(repository, 'ls-tree', '-r', '-z', 'HEAD'), paths);
+    for (const { path } of attributes) {
+      const file=join(repository,path);
+      await regularSourceFile(root,portable(relative(root,file)));
+      assert.deepEqual(await readFile(file),Buffer.from(await git(repository,'show','HEAD:'+path)),'Git attributes differ from committed checkout policy');
+    }
+    return attributes;
+  }
   async function receive(repository, paths) {
     const hasModules = await git(repository, "ls-tree", "HEAD", "--", ".gitmodules");
     if (!hasModules.trim()) return;
@@ -377,17 +390,19 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         const key = line.slice(0, line.search(/\s/u)).replace(/[.]path$/u, ".url");
         const url = (await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get", key)).trim();
         if (!/^(?:https:\/\/github[.]com\/|git@github[.]com:|ssh:\/\/git@github[.]com\/)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[.]git)?$/u.test(url)) throw new Error("selected mount needs its committed GitHub source URL");
-        // A sparse owner can hold the committed Gitlink without any physical
-        // ancestor directories. Create only that recorded path, checking each
-        // existing ancestor before mkdir can follow a redirected carrier.
-        let parent = repository;
-        for (const part of path.split("/").slice(0, -1)) {
+        // Sparse source can omit the mount's ordinary ancestors. Create only
+        // those directories, checking each before descending; never hydrate
+        // their unselected files or follow a redirected ancestor.
+        let parent = root;
+        for (const part of relative(root, dirname(target)).split(sep).filter(Boolean)) {
           parent = join(parent, part);
-          const held = await lstat(parent).catch(error => { if (error.code === "ENOENT") return null; throw error; });
-          if (held && (!held.isDirectory() || held.isSymbolicLink())) throw new Error("selected mount parent is redirected");
-          if (!held) await mkdir(parent);
+          let entry = await lstat(parent).catch(error => { if (error.code === "ENOENT") return null; throw error; });
+          if (entry === null) {
+            await mkdir(parent);
+            entry = await lstat(parent);
+          }
+          if (!entry.isDirectory() || entry.isSymbolicLink() || await realpath(parent) !== parent) throw new Error("selected mount parent is redirected");
         }
-        if (await realpath(dirname(target)) !== dirname(target)) throw new Error("selected mount parent is redirected");
         const existing = await lstat(target).catch(error => { if (error.code === "ENOENT") return null; throw error; });
         if (existing && (!existing.isDirectory() || (await readdir(target)).length)) throw new Error("unreceived selected mount holds existing contents; preserve and reconcile it: " + path);
         await execute("git", ["submodule", "init", "--", path], { cwd: repository, environment });
@@ -420,7 +435,9 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
           assert.equal((await git(target,"rev-parse","HEAD")).trim(),match[1],"sparse expansion changed selected source");
         }
       }
-      mounts.push({ path: portable(relative(root, target)), revision: match[1] });
+      const localPaths=wanted.map(id=>id===path?'.':id.slice(path.length+1));
+      const attributes=await receiveAttributes(target,localPaths);
+      mounts.push({ path: portable(relative(root, target)), revision: match[1], ...(attributes.length?{attributes}:{}) });
       await receive(target, wanted.map((id) => id === path ? "." : id.slice(path.length + 1)));
     }
   }
@@ -586,7 +603,7 @@ export async function installWorkspaceSelection({
         assert.equal((await git("rev-parse", "HEAD")).trim(), commit, "source revision changed during selection");
         for (const [name, bytes] of before) assert.deepEqual(await optionalBytes(join(root, name)), bytes, "source configuration changed: " + name);
         return { type: "NodeRuntimeLockedSourceSelection", version: 1, workspace: root, commit,
-          roots: requestedImporters, importerIds, sourceLockSha256: digest(before.get("pnpm-lock.yaml")),
+          roots: requestedImporters, importerIds, tooling, executable: pnpm, sourceLockSha256: digest(before.get("pnpm-lock.yaml")),
           sourceImporterCount: Object.keys(sourceLock.importers).length, sourceConfigurationUnchanged: true,
           elapsedMilliseconds: Date.now() - startedAt };
       }

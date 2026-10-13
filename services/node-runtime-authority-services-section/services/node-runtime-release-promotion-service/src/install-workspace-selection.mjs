@@ -418,6 +418,35 @@ export function projectSelectedWorkspaceLock({ lockfile, importerIds, workspace,
   };
 }
 
+/** Derive only workspace-star demand from actual manifests and existing canonical lock links.
+ * Registry resolution, version selection and whole-lock acceptance remain pnpm-owned. */
+export function deriveWorkspaceOnlyImporter({lockfile, importerId, manifest, providers}) {
+  if (String(lockfile?.lockfileVersion) !== "9.0" || !lockfile.importers || !Array.isArray(providers))
+    throw new TypeError("workspace-only demand requires a pnpm9 lock and source providers");
+  const canonical = path => typeof path === "string" && path && !isAbsolute(path) && !/[\\\0]/u.test(path)
+    && (path === "." || path.split("/").every(part => part && part !== "." && part !== ".."));
+  if (!canonical(importerId) || typeof manifest?.name !== "string") throw new TypeError("canonical importer and manifest required");
+  const importer = {}, used = [];
+  for (const field of fields) for (const [name, specifier] of Object.entries(manifest[field] ?? {})) {
+    if (field !== "dependencies" && name in (manifest.dependencies ?? {})) continue;
+    if (specifier !== "workspace:*") throw new TypeError("workspace-only derivation cannot resolve registry or version demand: " + name);
+    const matches = providers.filter(provider => provider.manifest?.name === name);
+    if (matches.length !== 1 || !canonical(matches[0].path) || !lockfile.importers[matches[0].path])
+      throw new Error("workspace demand needs one already-locked source owner: " + name);
+    const provider = matches[0], links = new Set();
+    for (const [path, row] of Object.entries(lockfile.importers)) for (const entries of fields.map(key => row[key] ?? {})) {
+      const entry = entries[name];
+      if (typeof entry?.version === "string" && entry.version.startsWith("link:"))
+        links.add(portable(relative("/", resolve("/", path, entry.version.slice(5)))) || ".");
+    }
+    if (links.size !== 1 || !links.has(provider.path)) throw new Error("workspace demand has absent or competing lock owners: " + name);
+    (importer[field] ??= {})[name] = {specifier, version:"link:" + (portable(relative(importerId, provider.path)) || ".")};
+    used.push({name, path:provider.path});
+  }
+  return {lockfile:{...lockfile, importers:{...lockfile.importers, [importerId]:importer}}, importerId, providers:used,
+    registryResolved:false, frozenReceived:false};
+}
+
 /**
  * Install a pnpm-selected source closure in a real checkout.
  * pnpm owns project discovery, graph traversal, lockfile codecs, materialization and policy checks.

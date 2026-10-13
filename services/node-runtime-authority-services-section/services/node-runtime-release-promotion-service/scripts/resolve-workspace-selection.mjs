@@ -37,6 +37,9 @@ if (planned) {
   // New package owners are discovered from the committed source objects in
   // received mounts, under the authored PNPM workspace patterns. Only demanded
   // owner bodies are materialized. PNPM derives every new importer below.
+  const workspaceFile=join(root,'pnpm-workspace.yaml');
+  if(!lstatSync(workspaceFile).isFile()||realpathSync(workspaceFile)!==workspaceFile
+    ||!readFileSync(workspaceFile).equals(execFileSync('git',['-C',root,'show',previous.commit+':pnpm-workspace.yaml'])))throw new Error('workspace patterns differ from committed source');
   const workspacePatterns=JSON.parse(execFileSync(previous.executable,['config','get','packages','--json'],{cwd:root,encoding:'utf8',stdio:['ignore','pipe','pipe']}));
   if(!Array.isArray(workspacePatterns)||workspacePatterns.some(pattern=>typeof pattern!=='string'))throw new Error('source workspace must declare package patterns');
   const workspaceOwner=id=>id==='.'||(workspacePatterns.some(pattern=>!pattern.startsWith('!')&&matchesGlob(id,pattern))

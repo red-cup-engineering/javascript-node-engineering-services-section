@@ -16,7 +16,7 @@ export async function generateWorkspaceTypeScript(selection){
   const workspace=await verifyWorkspaceSelection(selection),providers=new Map();
   for(const importer of selection.importerIds){
     const root=join(workspace,importer),bytes=await readFile(join(root,'package.json')),manifest=JSON.parse(bytes);
-    const recipe=/^tsc -p (tsconfig(?:\.build)?\.json)$/u.exec(manifest.scripts?.build??manifest.scripts?.['build:node']??'');
+    const recipe=/^tsc -p (tsconfig(?:\.build)?\.json)$/u.exec(manifest.scripts?.['build:node']??manifest.scripts?.build??'');
     if(recipe)providers.set(manifest.name,{importer,root,manifest,bytes,configuration:recipe[1]});
   }
   const active=new Set(),done=new Set(),packages=[];

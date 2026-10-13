@@ -231,7 +231,7 @@ export async function runWorkspaceSelection({ receipt, arguments: args, deployOu
     assert.deepEqual(args, ["--filter", owner.name, "--config.ignore-scripts=true", "--config.inject-workspace-packages=true", "deploy", "--prod", output], "produced output requires the exact selected deploy invocation");
     try { await lstat(output); throw new Error("deploy output already exists"); } catch (error) { if (error.code !== "ENOENT") throw error; }
   }
-  const scope = receipt.importerIds.filter(id => id !== ".").map(id => "--workspace-packages=" + id);
+  const scope = receipt.importerIds.map(id => "--workspace-packages=" + id);
   // `run` does not expose install's --lockfile-dir CLI flag; the maintained
   // pnpm config namespace carries this same setting across both commands.
   const command = ["--config.lockfile-dir=" + receipt.artifact, ...scope, ...args];
@@ -507,7 +507,7 @@ export async function installWorkspaceSelection({
     // Even already-materialized and selector-based installs record the same
     // committed mount custody which later build/pack commands must re-receive.
     if (!materializeSources) sourceMounts = await receiveSelectedSources({ root, importerIds, environment });
-    const workspaceArgs = importerIds.filter((id) => id !== ".").map((id) => "--workspace-packages=" + id);
+    const workspaceArgs = importerIds.map((id) => "--workspace-packages=" + id);
     const scopedProjects = JSON.parse(await runPnpm([...workspaceArgs, "list", "--recursive", "--depth=-1", "--json"]));
     assert.deepEqual(scopedProjects.map(({ path }) => portable(relative(root, path)) || ".").sort(), importerIds, "explicit pnpm workspace scope differs from selection");
     const manifestHashes = {};

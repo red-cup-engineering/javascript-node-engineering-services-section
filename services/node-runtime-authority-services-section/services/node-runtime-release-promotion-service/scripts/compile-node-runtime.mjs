@@ -2,6 +2,7 @@
 import { build } from "esbuild";
 import { existsSync, globSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { join, resolve, relative, isAbsolute } from "node:path";
+import { createRequire } from "node:module";
 
 const args = process.argv.slice(2);
 const entries = [];
@@ -72,6 +73,15 @@ if (!entries.length) throw new TypeError("at least one runtime entrance is requi
 // the installed package layout that owns file URLs and runtime assets.
 await build({ entryPoints: [...new Set(entries)], bundle: true, write: false, outdir: "compiled-runtime", preserveSymlinks,
   platform: "node", format: "esm", target: "node24", logLevel: "error",
+  plugins: [{ name: "installed-third-party-boundaries", setup(builder) {
+    builder.onResolve({ filter: /^(?:@[^/]+\/)?[^./][^:]*$/u }, (args) => {
+      if (args.path.startsWith("@red-cup-engineering/") || args.path.startsWith("@lenticule-science/")) return;
+      // These packages run in their installed Node layout. Inlining a vendor's
+      // generated bundle changes optional and native binding semantics.
+      createRequire(args.importer).resolve(args.path);
+      return { path: args.path, external: true };
+    });
+  } }],
   external: ["*.node", "*.wasm"], loader: { ".sql": "text", ".txt": "text" } });
 process.stdout.write(JSON.stringify({ type: "NodeRuntimeSourceCompilation", version: 1, entries,
   staticBindingsCompiled: true, applicationExecuted: false }) + "\n");

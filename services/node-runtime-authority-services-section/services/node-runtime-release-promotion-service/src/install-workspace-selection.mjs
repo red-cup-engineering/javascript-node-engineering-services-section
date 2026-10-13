@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -235,7 +235,7 @@ export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace 
 }
 
 /** Receive recorded selected Gitlinks; acquisition is allowed only during requested installation. */
-async function receiveSelectedSources({ root, importerIds, environment, onOutput, materialize = false }) {
+export async function receiveSelectedSources({ root, importerIds, environment, onOutput, materialize = false }) {
   const git = (cwd, ...args) => execute("git", args, { cwd, environment });
   const sparse = await git(root, "config", "--bool", "core.sparseCheckout").catch((error) => {
     if (error.exitCode === 1) return "false"; throw error;
@@ -276,7 +276,40 @@ async function receiveSelectedSources({ root, importerIds, environment, onOutput
       if (status.startsWith("-")) {
         if (!materialize) throw new Error("selected mount is not materialized: " + path);
         onOutput?.("Materializing selected Gitlink: " + portable(relative(root, target)) + "\n");
-        await execute("git", ["-c", "protocol.file.allow=never", "submodule", "update", "--init", "--checkout", "--", path], { cwd: repository, environment });
+        // Set the literal package projection BEFORE checkout. A full owner
+        // checkout can hydrate unrelated corpus bodies; cone mode also includes
+        // ordinary files in ancestor directories, so it is not sufficient here.
+        const selected = wanted.map(id => id === path ? "." : id.slice(path.length + 1));
+        if (selected.some(id => /[\\\r\n\0]/u.test(id))) throw new Error("selected source path cannot be represented by a literal sparse projection");
+        const literal = id => "/" + id.replace(/([*?\[\] ])/gu, "\\$1");
+        const patterns = selected.includes(".") ? ["/*"] : ["/.gitmodules", ...selected.map(id => literal(id) + "/")];
+        const key = line.slice(0, line.search(/\s/u)).replace(/[.]path$/u, ".url");
+        const url = (await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get", key)).trim();
+        if (!/^(?:https:\/\/github[.]com\/|git@github[.]com:|ssh:\/\/git@github[.]com\/)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[.]git)?$/u.test(url)) throw new Error("selected mount needs its committed GitHub source URL");
+        if (await realpath(dirname(target)) !== dirname(target)) throw new Error("selected mount parent is redirected");
+        const existing = await lstat(target).catch(error => { if (error.code === "ENOENT") return null; throw error; });
+        if (existing && (!existing.isDirectory() || (await readdir(target)).length)) throw new Error("unreceived selected mount holds existing contents; preserve and reconcile it: " + path);
+        await execute("git", ["submodule", "init", "--", path], { cwd: repository, environment });
+        await git(repository, "init", "-q", target);
+        await git(target, "remote", "add", "origin", url);
+        await git(target, "config", "remote.origin.promisor", "true");
+        await git(target, "config", "remote.origin.partialclonefilter", "blob:none");
+        await execute("git", ["-c", "protocol.file.allow=never", "-c", "core.hooksPath=/dev/null", "fetch", "--quiet", "--depth=1", "--no-tags", "--filter=blob:none", "origin", match[1]], { cwd: target, environment });
+        const objects = async () => (await git(target, "cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype)")).trim().split("\n").filter(Boolean);
+        // --filter is a request: some servers warn and send an unfiltered pack.
+        // A refused partial acquisition is retained, never certified or erased.
+        if ((await objects()).some(row => row.endsWith(" blob"))) throw new Error("selected source transport did not honor blob:none; preserve the unreceived carrier");
+        const selectedBlobs = new Set((await git(target, "ls-tree", "-r", "-z", match[1])).split("\0").filter(Boolean).flatMap(row => {
+          const tab = row.indexOf("\t"), [mode, type, oid] = row.slice(0, tab).split(" "), file = row.slice(tab + 1);
+          // A selected descendant needs its ancestor Gitlink placeholder, but
+          // never the ordinary files beside that mount.
+          if (mode === "160000" && selected.some(id => id === file || id.startsWith(file + "/"))) patterns.push(literal(file));
+          return type === "blob" && (file === ".gitmodules" || selected.includes(".") || selected.some(id => file.startsWith(id + "/"))) ? [oid] : [];
+        }));
+        await git(target, "sparse-checkout", "init", "--no-cone");
+        await git(target, "sparse-checkout", "set", "--no-cone", "--", ...patterns);
+        await execute("git", ["-c", "protocol.file.allow=never", "-c", "core.hooksPath=/dev/null", "checkout", "-q", "--detach", match[1]], { cwd: target, environment });
+        if ((await objects()).some(row => row.endsWith(" blob") && !selectedBlobs.has(row.split(" ")[0]))) throw new Error("selected checkout received blobs outside its package projection; preserve the unreceived carrier");
       }
       assert.equal((await git(target, "rev-parse", "HEAD")).trim(), match[1], "selected mount source changed: " + path);
       mounts.push({ path: portable(relative(root, target)), revision: match[1] });

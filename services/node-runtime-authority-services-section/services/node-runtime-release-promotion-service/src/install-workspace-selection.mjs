@@ -92,6 +92,8 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
   const root = await realpath(receipt.workspace);
   assert.equal((await execute("git", ["-C", root, "rev-parse", "HEAD"], { environment })).trim(), receipt.commit,
     "selected source revision changed");
+  const sourceMounts = await receiveSelectedSources({ root, importerIds: receipt.importerIds, environment });
+  assert.deepEqual(sourceMounts, receipt.sourceMounts, "selected source mounts differ from their installed receipt");
   assert.equal(digest(await readFile(join(receipt.artifact, "pnpm-lock.yaml"))), receipt.scopedLockSha256,
     "selected frozen lock changed");
   for (const [name, hash] of Object.entries(receipt.sourceHashes)) {
@@ -156,13 +158,13 @@ export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace 
   return [...selected].sort();
 }
 
-/** Materialize only recorded Gitlinks containing selected source paths; never advance existing mounts. */
-async function materializeSelectedSources({ root, importerIds, environment, onOutput }) {
+/** Receive recorded selected Gitlinks; acquisition is allowed only during requested installation. */
+async function receiveSelectedSources({ root, importerIds, environment, onOutput, materialize = false }) {
   const git = (cwd, ...args) => execute("git", args, { cwd, environment });
   const sparse = await git(root, "config", "--bool", "core.sparseCheckout").catch((error) => {
     if (error.exitCode === 1) return "false"; throw error;
   });
-  if (sparse.trim() === "true") {
+  if (materialize && sparse.trim() === "true") {
     // Root-owned instance data and agency carriers are package files too. A
     // source selection which keeps only nested importers silently drops them.
     const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
@@ -195,6 +197,7 @@ async function materializeSelectedSources({ root, importerIds, environment, onOu
       const status = await git(repository, "submodule", "status", "--", path);
       if (status.startsWith("+") || status.startsWith("U")) throw new Error("selected mount differs from recorded source; preserve and reconcile it: " + path);
       if (status.startsWith("-")) {
+        if (!materialize) throw new Error("selected mount is not materialized: " + path);
         onOutput?.("Materializing selected Gitlink: " + portable(relative(root, target)) + "\n");
         await execute("git", ["-c", "protocol.file.allow=never", "submodule", "update", "--init", "--checkout", "--", path], { cwd: repository, environment });
       }
@@ -326,7 +329,7 @@ export async function installWorkspaceSelection({
           sourceImporterCount: Object.keys(sourceLock.importers).length, sourceConfigurationUnchanged: true,
           elapsedMilliseconds: Date.now() - startedAt };
       }
-      if (materializeSources) sourceMounts = await materializeSelectedSources({ root, importerIds, environment, onOutput });
+      if (materializeSources) sourceMounts = await receiveSelectedSources({ root, importerIds, environment, onOutput, materialize: true });
       const sourceChanges = await git("status", "--porcelain=v1", "--untracked-files=normal", "--", "package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", ".npmrc", ...importerIds.filter((id) => id !== "."));
       if (sourceChanges.trim()) throw new Error("selected source has local changes; preserve and reconcile it before locked installation");
     } else {
@@ -337,6 +340,9 @@ export async function installWorkspaceSelection({
         return portable(relative(root, resolve(path))) || ".";
       })])].sort();
     }
+    // Even already-materialized and selector-based installs record the same
+    // committed mount custody which later build/pack commands must re-receive.
+    if (!materializeSources) sourceMounts = await receiveSelectedSources({ root, importerIds, environment });
     const workspaceArgs = importerIds.filter((id) => id !== ".").map((id) => "--workspace-packages=" + id);
     const scopedProjects = JSON.parse(await runPnpm([...workspaceArgs, "list", "--recursive", "--depth=-1", "--json"]));
     assert.deepEqual(scopedProjects.map(({ path }) => portable(relative(root, path)) || ".").sort(), importerIds, "explicit pnpm workspace scope differs from selection");

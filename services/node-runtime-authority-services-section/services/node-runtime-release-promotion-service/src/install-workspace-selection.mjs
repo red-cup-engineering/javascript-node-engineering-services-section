@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -83,6 +83,27 @@ async function preserveSourceBinModes(bins) {
   }
 }
 
+/** Refuse redirected source carriers before reading their bytes. */
+async function regularSourceFile(root, path) {
+  if (typeof path !== "string" || !path || isAbsolute(path) || path.includes("\0") || path.includes("\\")
+      || path.split(/[\\/]/u).some(part => !part || part === "." || part === "..")) {
+    throw new TypeError("source carrier needs a canonical relative path");
+  }
+  const parts = path.split("/");
+  let current = root;
+  for (const [index, part] of parts.entries()) {
+    current = join(current, part);
+    const entry = await lstat(current).catch(error => {
+      if (error.code === "ENOENT") throw new Error("selected source carrier is missing or not materialized: " + path, { cause: error });
+      throw error;
+    });
+    if (entry.isSymbolicLink() || (index === parts.length - 1 ? !entry.isFile() : !entry.isDirectory())) {
+      throw new Error("source carrier is redirected or not regular: " + path);
+    }
+  }
+  return current;
+}
+
 /** Verify the exact source, manifests and frozen lock bound by an installed receipt. */
 export async function verifyWorkspaceSelection(receipt, { environment = process.env } = {}) {
   if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
@@ -90,6 +111,19 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
     throw new TypeError("an installed, unchanged workspace selection is required");
   }
   const root = await realpath(receipt.workspace);
+  if (root !== resolve(receipt.workspace)) throw new Error("selected source root is redirected");
+  // Establish the source-file boundary before the verifier's first byte read.
+  // Mount identity alone does not confine ordinary packages below that mount.
+  for (const id of receipt.importerIds) {
+    await regularSourceFile(root, id === "." ? "package.json" : id + "/package.json");
+  }
+  for (const name of Object.keys(receipt.sourceHashes)) await regularSourceFile(root, name);
+  for (const id of Object.keys(receipt.manifestHashes)) {
+    await regularSourceFile(root, id === "." ? "package.json" : id + "/package.json");
+  }
+  const artifact = await realpath(receipt.artifact);
+  if (artifact !== resolve(receipt.artifact)) throw new Error("selected receipt artifact is redirected");
+  await regularSourceFile(artifact, "pnpm-lock.yaml");
   assert.equal((await execute("git", ["-C", root, "rev-parse", "HEAD"], { environment })).trim(), receipt.commit,
     "selected source revision changed");
   const sourceMounts = await receiveSelectedSources({ root, importerIds: receipt.importerIds, environment });
@@ -179,6 +213,7 @@ async function receiveSelectedSources({ root, importerIds, environment, onOutput
   async function receive(repository, paths) {
     const hasModules = await git(repository, "ls-tree", "HEAD", "--", ".gitmodules");
     if (!hasModules.trim()) return;
+    await regularSourceFile(root, portable(relative(root, join(repository, ".gitmodules"))));
     assert.deepEqual(await readFile(join(repository, ".gitmodules")), Buffer.from(await git(repository, "show", "HEAD:.gitmodules")), "mount configuration differs from recorded source");
     const lines = await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get-regexp", "[.]path$").catch((error) => {
       if (error.exitCode === 1) return ""; throw error;

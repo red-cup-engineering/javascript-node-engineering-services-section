@@ -2,15 +2,18 @@
 import { build } from "esbuild";
 import { existsSync, globSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { join, resolve, relative, isAbsolute } from "node:path";
+import { nodeJobProgramEntries } from "@red-cup-engineering/node-job-service";
 
 const args = process.argv.slice(2);
 const entries = [];
+const jobDirectories = [], houseNames = new Set();
 let selection, runtime, preserveSymlinks = false;
 for (let index = 0; index < args.length; index += 2) {
   if (args[index] === "--preserve-symlinks") { preserveSymlinks = true; index--; continue; }
-  if (!["--entry", "--selection", "--runtime"].includes(args[index]) || !args[index + 1]) throw new TypeError("usage: compile-node-runtime [--entry <module>...] [--selection <installed receipt> --runtime <packed runtime>] [--preserve-symlinks]");
+  if (!["--entry", "--selection", "--runtime", "--job-directory"].includes(args[index]) || !args[index + 1]) throw new TypeError("usage: compile-node-runtime [--entry <module>...] [--selection <installed receipt> --runtime <packed runtime>] [--job-directory <runtime-relative directory>...] [--preserve-symlinks]");
   if (args[index] === "--entry") entries.push(args[index + 1]);
   else if (args[index] === "--selection") selection = JSON.parse(readFileSync(args[index + 1], "utf8"));
+  else if (args[index] === "--job-directory") jobDirectories.push(args[index + 1]);
   else runtime = resolve(args[index + 1]);
 }
 const failures = [];
@@ -42,6 +45,7 @@ if (selection !== undefined) {
   if (selection.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || selection.status !== "installed" || selection.sourceConfigurationUnchanged !== true) throw new TypeError("an installed unchanged selection is required");
   const manifests = selection.importerIds.map(id => ({ id, manifest: JSON.parse(readFileSync(join(selection.workspace, id, "package.json"), "utf8")) }));
   const selected = new Map(manifests.map(item => [item.manifest.name, item]));
+  for (const name of selected.keys()) houseNames.add(name);
   if (runtime === undefined) for (const { id, manifest } of manifests) carrier(resolve(selection.workspace, id), manifest);
   else {
     // Inspect only the portable pnpm closure and its two package-directory levels.
@@ -65,6 +69,8 @@ if (selection !== undefined) {
     }
   }
 }
+if (jobDirectories.length && runtime === undefined) throw new TypeError("job programs must be compiled from their packed runtime");
+for (const jobsDirectory of jobDirectories) entries.push(...nodeJobProgramEntries({ runtimeRoot: runtime, jobsDirectory }));
 if (failures.length) throw new Error("Incomplete package carriers:\n" + failures.join("\n"));
 if (!entries.length) throw new TypeError("at least one runtime entrance is required");
 // Compile the actual source entrances and their static dependency bindings.
@@ -75,7 +81,8 @@ const compiled = await build({ entryPoints: [...new Set(entries)], bundle: true,
   plugins: [{ name: "installed-third-party-boundaries", setup(builder) {
     builder.onResolve({ filter: /^(?:@[^/]+\/)?[^./][^:]*$/ }, async (args) => {
       if (args.pluginData?.installedVendor === true) return;
-      if (args.path.startsWith("@red-cup-engineering/") || args.path.startsWith("@lenticule-science/")) return;
+      const packageName = args.path.startsWith("@") ? args.path.split("/").slice(0, 2).join("/") : args.path.split("/")[0];
+      if (houseNames.has(packageName) || args.path.startsWith("@red-cup-engineering/") || args.path.startsWith("@lenticule-science/")) return;
       // These packages run in their installed Node layout. Inlining a vendor's
       // generated bundle changes optional and native binding semantics.
       const resolved = await builder.resolve(args.path, { resolveDir: args.resolveDir, kind: args.kind, pluginData: { installedVendor: true } });

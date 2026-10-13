@@ -335,6 +335,24 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
     await git(root, "sparse-checkout", "add", "--skip-checks", "--", ...importerIds.filter(id => id !== "."), ...assets);
   }
   const mounts = [];
+  const attributePaths = paths => [...new Set(paths.flatMap(path => {
+    const parts=path==='.'?[]:path.split('/');
+    return Array.from({length:parts.length+1},(_,at)=>[...parts.slice(0,at),'.gitattributes'].join('/'));
+  }))];
+  async function receiveAttributes(repository, paths) {
+    const facts=[];
+    for(const path of attributePaths(paths)){
+      const row=(await git(repository,'ls-tree','HEAD','--',path)).trim();
+      if(!row)continue;
+      const match=/^(100644|100755) blob ([a-f0-9]{40})\t(.+)$/u.exec(row);
+      if(!match||match[3]!==path)throw new Error('Git attributes must be a committed regular source carrier');
+      const file=join(repository,path);
+      await regularSourceFile(root,portable(relative(root,file)));
+      assert.deepEqual(await readFile(file),Buffer.from(await git(repository,'show','HEAD:'+path)),'Git attributes differ from committed checkout policy');
+      facts.push({path,gitBlob:match[2]});
+    }
+    return facts;
+  }
   async function receive(repository, paths) {
     const hasModules = await git(repository, "ls-tree", "HEAD", "--", ".gitmodules");
     if (!hasModules.trim()) return;
@@ -365,6 +383,7 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         const selected = wanted.map(id => id === path ? "." : id.slice(path.length + 1));
         if (selected.some(id => /[\\\r\n\0]/u.test(id))) throw new Error("selected source path cannot be represented by a literal sparse projection");
         const literal = id => "/" + id.replace(/([*?\[\] ])/gu, "\\$1");
+        const attributes = new Set(attributePaths(selected));
         const patterns = selected.includes(".") ? ["/*"] : ["/.gitmodules", ...selected.map(id => literal(id) + "/")];
         const key = line.slice(0, line.search(/\s/u)).replace(/[.]path$/u, ".url");
         const url = (await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get", key)).trim();
@@ -398,8 +417,9 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
           const tab = row.indexOf("\t"), [mode, type, oid] = row.slice(0, tab).split(" "), file = row.slice(tab + 1);
           // A selected descendant needs its ancestor Gitlink placeholder, but
           // never the ordinary files beside that mount.
+          if(type==="blob"&&attributes.has(file))patterns.push(literal(file));
           if (mode === "160000" && selected.some(id => id === file || id.startsWith(file + "/"))) patterns.push(literal(file));
-          return type === "blob" && (file === ".gitmodules" || selected.includes(".") || selected.some(id => file.startsWith(id + "/"))) ? [oid] : [];
+          return type === "blob" && (file === ".gitmodules" || attributes.has(file) || selected.includes(".") || selected.some(id => file.startsWith(id + "/"))) ? [oid] : [];
         }));
         await git(target, "sparse-checkout", "init", "--no-cone");
         await git(target, "sparse-checkout", "set", "--no-cone", "--", ...patterns);
@@ -407,7 +427,17 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         if ((await objects()).some(row => row.endsWith(" blob") && !selectedBlobs.has(row.split(" ")[0]))) throw new Error("selected checkout received blobs outside its package projection; preserve the unreceived carrier");
       }
       assert.equal((await git(target, "rev-parse", "HEAD")).trim(), match[1], "selected mount source changed: " + path);
-      mounts.push({ path: portable(relative(root, target)), revision: match[1] });
+      const localPaths=wanted.map(id=>id===path?'.':id.slice(path.length+1));
+      // Git consults ancestor attributes even outside the sparse package body.
+      // Recover only those exact committed metadata files after a refused old
+      // projection, without widening its ordinary source or changing its HEAD.
+      if(materialize&&(await git(target,'config','--bool','core.sparseCheckout').catch(()=>'' )).trim()==='true'){
+        const attrs=[];
+        for(const file of attributePaths(localPaths))if((await git(target,'ls-tree','HEAD','--',file)).trim())attrs.push('/'+file);
+        if(attrs.length)await git(target,'sparse-checkout','add','--no-cone','--',...attrs);
+      }
+      const attributes=await receiveAttributes(target,localPaths);
+      mounts.push({ path: portable(relative(root, target)), revision: match[1], ...(attributes.length?{attributes}:{}) });
       await receive(target, wanted.map((id) => id === path ? "." : id.slice(path.length + 1)));
     }
   }

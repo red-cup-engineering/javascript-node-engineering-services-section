@@ -270,7 +270,7 @@ export function exactImporterFilterArgs(importerIds) {
   const seen = new Set();
   return importerIds.map((id) => {
     if (typeof id !== "string" || (id !== "." &&
-        (!/^[a-zA-Z0-9_@./-]+$/u.test(id) || id.startsWith("/") || id.startsWith("./") || id.includes("//") || id.split("/").includes("..")))) {
+        (!/^[a-zA-Z0-9_@./-]+$/u.test(id) || id.startsWith("/") || id.startsWith("./") || id.includes("//") || id.split("/").some(part=>part==="."||part==="..")))) {
       throw new Error("unsafe locked importer path for exact pnpm filtering: " + String(id));
     }
     if (seen.has(id)) throw new Error("duplicate locked importer path: " + id);

@@ -74,7 +74,7 @@ if (!entries.length) throw new TypeError("at least one runtime entrance is requi
 await build({ entryPoints: [...new Set(entries)], bundle: true, write: false, outdir: "compiled-runtime", preserveSymlinks,
   platform: "node", format: "esm", target: "node24", logLevel: "error",
   plugins: [{ name: "installed-third-party-boundaries", setup(builder) {
-    builder.onResolve({ filter: /^(?:@[^/]+\/)?[^./][^:]*$/u }, (args) => {
+    builder.onResolve({ filter: /^(?:@[^/]+\/)?[^./][^:]*$/ }, (args) => {
       if (args.path.startsWith("@red-cup-engineering/") || args.path.startsWith("@lenticule-science/")) return;
       // These packages run in their installed Node layout. Inlining a vendor's
       // generated bundle changes optional and native binding semantics.

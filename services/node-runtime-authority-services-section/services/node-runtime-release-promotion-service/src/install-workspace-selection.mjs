@@ -426,7 +426,7 @@ export function deriveWorkspaceOnlyImporter({lockfile, importerId, manifest, pro
   const canonical = path => typeof path === "string" && path && !isAbsolute(path) && !/[\\\0]/u.test(path)
     && (path === "." || path.split("/").every(part => part && part !== "." && part !== ".."));
   if (!canonical(importerId) || typeof manifest?.name !== "string") throw new TypeError("canonical importer and manifest required");
-  const importer = {}, used = [];
+  const importer = {specifiers:{}}, used = [];
   for (const field of fields) for (const [name, specifier] of Object.entries(manifest[field] ?? {})) {
     if (field !== "dependencies" && name in (manifest.dependencies ?? {})) continue;
     if (specifier !== "workspace:*") throw new TypeError("workspace-only derivation cannot resolve registry or version demand: " + name);
@@ -436,11 +436,12 @@ export function deriveWorkspaceOnlyImporter({lockfile, importerId, manifest, pro
     const provider = matches[0], links = new Set();
     for (const [path, row] of Object.entries(lockfile.importers)) for (const entries of fields.map(key => row[key] ?? {})) {
       const entry = entries[name];
-      if (typeof entry?.version === "string" && entry.version.startsWith("link:"))
-        links.add(portable(relative("/", resolve("/", path, entry.version.slice(5)))) || ".");
+      if (typeof entry === "string" && entry.startsWith("link:"))
+        links.add(portable(relative("/", resolve("/", path, entry.slice(5)))) || ".");
     }
     if (links.size !== 1 || !links.has(provider.path)) throw new Error("workspace demand has absent or competing lock owners: " + name);
-    (importer[field] ??= {})[name] = {specifier, version:"link:" + (portable(relative(importerId, provider.path)) || ".")};
+    importer.specifiers[name] = specifier;
+    (importer[field] ??= {})[name] = "link:" + (portable(relative(importerId, provider.path)) || ".");
     used.push({name, path:provider.path});
   }
   return {lockfile:{...lockfile, importers:{...lockfile.importers, [importerId]:importer}}, importerId, providers:used,

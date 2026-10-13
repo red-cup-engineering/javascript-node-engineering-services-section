@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, realpathSync } from "node:fs";
+import { readFileSync, realpathSync, existsSync, lstatSync } from "node:fs";
 import { resolve, relative, join, isAbsolute } from "node:path";
 import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -24,7 +24,33 @@ if (planned) {
   if(commit!==previous.commit||createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex')!==previous.sourceLockSha256)throw new Error('locked source plan differs from its exact committed input');
   const locked=await readWorkspaceSelectionLock({workspace:root,tooling:previous.tooling});
   ids=selectLockedWorkspaceClosure({lockfile:locked,importerIds:ids,workspace:root});
-  await receiveSelectedSources({root,importerIds:ids,materialize:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
+  let mounts=await receiveSelectedSources({root,importerIds:ids,materialize:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
+  // Current authored manifests govern workspace demand. A historical lock is
+  // resolver input and cannot omit a newly declared supplier. Read only package
+  // metadata at its known importer paths in already received source carriers;
+  // PNPM still resolves every version/peer/integrity below, never a joined lock.
+  const readOwnedManifest=(id)=>{
+    const file=resolve(root,id,'package.json');
+    if(!existsSync(file))return undefined;
+    if(!lstatSync(file).isFile()||realpathSync(file)!==file)throw new Error('provider manifest is redirected: '+id);
+    const source=[{path:'.',revision:previous.commit},...mounts].filter(row=>row.path==='.'||id===row.path||id.startsWith(row.path+'/')).sort((a,b)=>b.path.length-a.path.length)[0];
+    const repository=source.path==='.'?root:resolve(root,source.path),path=relative(repository,file);
+    let committed;try{committed=execFileSync('git',['-c','core.hooksPath=/dev/null','-C',repository,'show',source.revision+':'+path],{env:{...process.env,GIT_NO_LAZY_FETCH:'1'},stdio:['ignore','pipe','ignore']});}catch{return undefined;}
+    const bytes=readFileSync(file);if(!bytes.equals(committed))throw new Error('provider manifest differs from exact received source: '+id);
+    return JSON.parse(bytes);
+  };
+  for(;;){
+    const selected=ids.map(id=>({id,manifest:readOwnedManifest(id)})),names=new Set(selected.map(row=>row.manifest?.name)),missing=new Set();
+    if(selected.some(row=>!row.manifest))throw new Error('selected provider manifest has no received source');
+    for(const {manifest}of selected)for(const field of ['dependencies','devDependencies','optionalDependencies'])for(const[name,version]of Object.entries(manifest[field]??{}))if(version.startsWith('workspace:')&&!names.has(name))missing.add(name);
+    if(!missing.size)break;
+    const candidates=new Map([...missing].map(name=>[name,[]]));
+    for(const id of Object.keys(locked.importers)){if(ids.includes(id))continue;const manifest=readOwnedManifest(id);if(candidates.has(manifest?.name))candidates.get(manifest.name).push(id);}
+    const additions=[];
+    for(const[name,paths]of candidates){if(paths.length!==1)throw new Error('current workspace demand needs one received provider for '+name+': '+paths.length);additions.push(paths[0]);}
+    ids=selectLockedWorkspaceClosure({lockfile:locked,importerIds:[...ids,...additions],workspace:root});
+    mounts=await receiveSelectedSources({root,importerIds:ids,materialize:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
+  }
 }
 if (flags.sourceLock !== undefined) {
   const require = createRequire(resolve(previous.tooling, "package.json"));

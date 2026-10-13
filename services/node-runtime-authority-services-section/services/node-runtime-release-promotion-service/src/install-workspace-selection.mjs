@@ -159,7 +159,7 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
 }
 
 /** Reuse the frozen installation's scope for its actual generation or packing command. */
-export async function runWorkspaceSelection({ receipt, arguments: args, environment = process.env, onOutput } = {}) {
+export async function runWorkspaceSelection({ receipt, arguments: args, deployOutput, environment = process.env, onOutput } = {}) {
   if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
       || receipt.status !== "installed" || receipt.sourceConfigurationUnchanged !== true) {
     throw new TypeError("an installed, unchanged workspace selection is required");
@@ -171,6 +171,15 @@ export async function runWorkspaceSelection({ receipt, arguments: args, environm
     throw new TypeError("a consumer command cannot replace the selected source or lock scope");
   }
   const root = await verifyWorkspaceSelection(receipt, { environment });
+  let output;
+  if (deployOutput !== undefined) {
+    if (typeof deployOutput !== "string" || !deployOutput) throw new TypeError("deploy output needs its explicit path");
+    output = resolve(deployOutput);
+    if (contained(root, output) || await realpath(dirname(output)) !== dirname(output)) throw new Error("deploy output must have a canonical parent outside source");
+    const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+    assert.deepEqual(args, ["--filter", manifest.name, "--config.ignore-scripts=true", "--config.inject-workspace-packages=true", "deploy", "--prod", output], "produced output requires the exact selected deploy invocation");
+    try { await lstat(output); throw new Error("deploy output already exists"); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
   const scope = receipt.importerIds.filter(id => id !== ".").map(id => "--workspace-packages=" + id);
   // `run` does not expose install's --lockfile-dir CLI flag; the maintained
   // pnpm config namespace carries this same setting across both commands.
@@ -178,9 +187,23 @@ export async function runWorkspaceSelection({ receipt, arguments: args, environm
   const bins = await sourceBinModes(root, receipt.importerIds);
   try { await execute(receipt.executable, command, { cwd: root, environment, onOutput }); }
   finally { await preserveSourceBinModes(bins); }
+  let produced;
+  if (output !== undefined) {
+    if (await realpath(output) !== output || !(await lstat(output)).isDirectory()) throw new Error("deploy output is redirected");
+    const files = [];
+    // These are PNPM deployFromSharedLockfile's documented root products, not
+    // a caller-selected file inventory. Preserve optional-file absence too.
+    for (const path of ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]) {
+      const file = join(output, path);
+      const entry = await lstat(file).catch(error => { if (error.code === "ENOENT" && path === "pnpm-workspace.yaml") return null; throw error; });
+      if (entry && !entry.isFile()) throw new Error("deploy metadata must be a regular nonredirected file: " + path);
+      files.push({ path, sha256: entry ? digest(await readFile(file)) : null });
+    }
+    produced = { directory: output, files };
+  }
   await verifyWorkspaceSelection(receipt, { environment });
   return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,
-    executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true };
+    executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true, ...(produced ? { produced } : {}) };
 }
 
 /** Select source importers by following committed links, without discovering unrelated projects. */

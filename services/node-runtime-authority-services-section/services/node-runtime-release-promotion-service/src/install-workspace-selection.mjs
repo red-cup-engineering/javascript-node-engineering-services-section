@@ -340,6 +340,16 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         const key = line.slice(0, line.search(/\s/u)).replace(/[.]path$/u, ".url");
         const url = (await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get", key)).trim();
         if (!/^(?:https:\/\/github[.]com\/|git@github[.]com:|ssh:\/\/git@github[.]com\/)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[.]git)?$/u.test(url)) throw new Error("selected mount needs its committed GitHub source URL");
+        // A sparse owner can hold the committed Gitlink without any physical
+        // ancestor directories. Create only that recorded path, checking each
+        // existing ancestor before mkdir can follow a redirected carrier.
+        let parent = repository;
+        for (const part of path.split("/").slice(0, -1)) {
+          parent = join(parent, part);
+          const held = await lstat(parent).catch(error => { if (error.code === "ENOENT") return null; throw error; });
+          if (held && (!held.isDirectory() || held.isSymbolicLink())) throw new Error("selected mount parent is redirected");
+          if (!held) await mkdir(parent);
+        }
         if (await realpath(dirname(target)) !== dirname(target)) throw new Error("selected mount parent is redirected");
         const existing = await lstat(target).catch(error => { if (error.code === "ENOENT") return null; throw error; });
         if (existing && (!existing.isDirectory() || (await readdir(target)).length)) throw new Error("unreceived selected mount holds existing contents; preserve and reconcile it: " + path);

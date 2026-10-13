@@ -260,6 +260,25 @@ export async function runWorkspaceSelection({ receipt, arguments: args, deployOu
     executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true, ...(produced ? { produced } : {}) };
 }
 
+/** Match only the lock-selected importer directories in pnpm's own project filter.
+ * This is additional to --workspace-packages: a broad manifest or ignored
+ * workspace override must never silently expand a frozen selected install.
+ * Reject selector metacharacters instead of interpreting source paths as globs.
+ */
+export function exactImporterFilterArgs(importerIds) {
+  if (!Array.isArray(importerIds) || !importerIds.length) throw new TypeError("nonempty selected importer paths required");
+  const seen = new Set();
+  return importerIds.map((id) => {
+    if (typeof id !== "string" || (id !== "." &&
+        (!/^[a-zA-Z0-9_@./-]+$/u.test(id) || id.startsWith("/") || id.startsWith("./") || id.includes("//") || id.split("/").includes("..")))) {
+      throw new Error("unsafe locked importer path for exact pnpm filtering: " + String(id));
+    }
+    if (seen.has(id)) throw new Error("duplicate locked importer path: " + id);
+    seen.add(id);
+    return "--filter={" + id + "}";
+  });
+}
+
 /** Select source importers by following committed links, without discovering unrelated projects. */
 export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace }) {
   if (String(lockfile?.lockfileVersion) !== "9.0") throw new Error("selected install requires a pnpm v9 lockfile");
@@ -508,7 +527,8 @@ export async function installWorkspaceSelection({
     // committed mount custody which later build/pack commands must re-receive.
     if (!materializeSources) sourceMounts = await receiveSelectedSources({ root, importerIds, environment });
     const workspaceArgs = importerIds.filter((id) => id !== ".").map((id) => "--workspace-packages=" + id);
-    const scopedProjects = JSON.parse(await runPnpm([...workspaceArgs, "list", "--recursive", "--depth=-1", "--json"]));
+    const exactFilters = exactImporterFilterArgs(importerIds);
+    const scopedProjects = JSON.parse(await runPnpm([...workspaceArgs, ...exactFilters, "list", "--recursive", "--depth=-1", "--json"]));
     assert.deepEqual(scopedProjects.map(({ path }) => portable(relative(root, path)) || ".").sort(), importerIds, "explicit pnpm workspace scope differs from selection");
     const manifestHashes = {};
     for (const id of importerIds) manifestHashes[id] = digest(await readFile(join(root, id, "package.json")));
@@ -520,7 +540,7 @@ export async function installWorkspaceSelection({
     await writeWantedLockfile(artifact, scopedLock);
     assert.deepEqual(await readWantedLockfile(artifact, { ignoreIncompatible: false }), scopedLock, "selected lock failed semantic round trip");
     const scopedBytes = await readFile(join(artifact, "pnpm-lock.yaml"));
-    const command = [...storeArgs, "--lockfile-dir=" + artifact, ...workspaceArgs, "install", ...(selector === undefined ? [] : ["--filter", selector]), "--frozen-lockfile", "--ignore-scripts"];
+    const command = [...storeArgs, "--lockfile-dir=" + artifact, ...workspaceArgs, ...(selector === undefined ? exactFilters : ["--filter", selector]), "install", "--frozen-lockfile", "--ignore-scripts"];
     receipt = {
       type: "NodeRuntimeWorkspaceSelectionInstallReceipt", version: 1, ...identity,
       recordedAt: new Date().toISOString(), artifact, tooling, importerIds, sourceMounts, selectionElapsedMilliseconds: Date.now() - startedAt,

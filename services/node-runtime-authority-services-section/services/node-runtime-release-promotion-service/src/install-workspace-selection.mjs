@@ -70,6 +70,26 @@ async function preserveSourceBinModes(bins) {
   }
 }
 
+/** Verify the exact source, manifests and frozen lock bound by an installed receipt. */
+export async function verifyWorkspaceSelection(receipt, { environment = process.env } = {}) {
+  if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
+      || receipt.status !== "installed" || receipt.sourceConfigurationUnchanged !== true) {
+    throw new TypeError("an installed, unchanged workspace selection is required");
+  }
+  const root = await realpath(receipt.workspace);
+  assert.equal((await execute("git", ["-C", root, "rev-parse", "HEAD"], { environment })).trim(), receipt.commit,
+    "selected source revision changed");
+  assert.equal(digest(await readFile(join(receipt.artifact, "pnpm-lock.yaml"))), receipt.scopedLockSha256,
+    "selected frozen lock changed");
+  for (const [name, hash] of Object.entries(receipt.sourceHashes)) {
+    assert.equal(digest(await readFile(join(root, name))), hash, "source configuration changed: " + name);
+  }
+  for (const [id, hash] of Object.entries(receipt.manifestHashes)) {
+    assert.equal(digest(await readFile(join(root, id, "package.json"))), hash, "selected manifest changed: " + id);
+  }
+  return root;
+}
+
 /** Reuse the frozen installation's scope for its actual generation or packing command. */
 export async function runWorkspaceSelection({ receipt, arguments: args, environment = process.env, onOutput } = {}) {
   if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
@@ -82,20 +102,7 @@ export async function runWorkspaceSelection({ receipt, arguments: args, environm
   if (args.some(arg => /^(?:--(?:config\.)?(?:workspace-packages|lockfile-dir|dir)|-C)(?:=|$)/u.test(arg))) {
     throw new TypeError("a consumer command cannot replace the selected source or lock scope");
   }
-  const root = await realpath(receipt.workspace);
-  const verify = async () => {
-    assert.equal((await execute("git", ["-C", root, "rev-parse", "HEAD"], { environment })).trim(), receipt.commit,
-      "selected source revision changed");
-    assert.equal(digest(await readFile(join(receipt.artifact, "pnpm-lock.yaml"))), receipt.scopedLockSha256,
-      "selected frozen lock changed");
-    for (const [name, hash] of Object.entries(receipt.sourceHashes)) {
-      assert.equal(digest(await readFile(join(root, name))), hash, "source configuration changed: " + name);
-    }
-    for (const [id, hash] of Object.entries(receipt.manifestHashes)) {
-      assert.equal(digest(await readFile(join(root, id, "package.json"))), hash, "selected manifest changed: " + id);
-    }
-  };
-  await verify();
+  const root = await verifyWorkspaceSelection(receipt, { environment });
   const scope = receipt.importerIds.filter(id => id !== ".").map(id => "--workspace-packages=" + id);
   // `run` does not expose install's --lockfile-dir CLI flag; the maintained
   // pnpm config namespace carries this same setting across both commands.
@@ -103,7 +110,7 @@ export async function runWorkspaceSelection({ receipt, arguments: args, environm
   const bins = await sourceBinModes(root, receipt.importerIds);
   try { await execute(receipt.executable, command, { cwd: root, environment, onOutput }); }
   finally { await preserveSourceBinModes(bins); }
-  await verify();
+  await verifyWorkspaceSelection(receipt, { environment });
   return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,
     executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true };
 }

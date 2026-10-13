@@ -44,6 +44,7 @@ async function optionalBytes(file) {
 
 async function sourceBinModes(root, importerIds) {
   const bins = new Map();
+  const sourceChanges = [];
   for (const id of importerIds) {
     const manifest = JSON.parse(await readFile(join(root, id, "package.json"), "utf8"));
     const entries = typeof manifest.bin === "string" ? [manifest.bin] : Object.values(manifest.bin ?? {});
@@ -52,7 +53,7 @@ async function sourceBinModes(root, importerIds) {
       // dirty source at the actual package before preserving its bin modes.
       const changed = await execute("git", ["-C", join(root, id), "status", "--porcelain=v1",
         "--untracked-files=no", "--ignore-submodules=none", "--", "."]);
-      if (changed.trim()) throw new Error("source bin package has unreconciled tracked changes: " + id);
+      if (changed.trim()) sourceChanges.push({importerId: id, changes: changed.trim()});
     }
     for (const entry of entries) {
       const file = resolve(root, id, entry);
@@ -60,6 +61,11 @@ async function sourceBinModes(root, importerIds) {
       const bytes = await optionalBytes(file);
       if (bytes !== undefined) bins.set(file, { mode: (await stat(file)).mode & 0o777, hash: digest(bytes) });
     }
+  }
+  if (sourceChanges.length) {
+    const error = new Error("source bin packages have unreconciled tracked changes:\n" + sourceChanges.map(item => item.importerId + "\n" + item.changes).join("\n"));
+    error.sourceChanges = sourceChanges;
+    throw error;
   }
   return bins;
 }

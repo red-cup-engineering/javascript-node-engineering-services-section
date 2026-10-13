@@ -307,6 +307,27 @@ export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace 
   return [...selected].sort();
 }
 
+/** A package projection includes the recorded Git controls that govern its checkout. */
+function selectedSourceProjection(tree, selected) {
+  if (selected.some(id => /[\\\r\n\0]/u.test(id))) throw new Error("selected sparse path is not literal");
+  const literal = id => "/" + id.replace(/([*?\[\] ])/gu, "\\$1");
+  const patterns = selected.includes(".") ? ["/*"] : ["/.gitmodules", ...selected.map(id => literal(id) + "/")];
+  const blobs = new Set();
+  for (const row of tree.split("\0").filter(Boolean)) {
+    const tab = row.indexOf("\t"), [mode, type, oid] = row.slice(0, tab).split(" "), file = row.slice(tab + 1);
+    const parent = portable(dirname(file));
+    const attributes = (file === ".gitattributes" || file.endsWith("/.gitattributes"))
+      && selected.some(id => id === "." || parent === "." || id === parent || id.startsWith(parent + "/"));
+    if (attributes) {
+      if (mode !== "100644" && mode !== "100755") throw new Error("selected checkout attributes are not regular recorded source: " + file);
+      patterns.push(literal(file));
+    }
+    if (mode === "160000" && selected.some(id => id === file || id.startsWith(file + "/"))) patterns.push(literal(file));
+    if (type === "blob" && (attributes || file === ".gitmodules" || selected.includes(".") || selected.some(id => file.startsWith(id + "/")))) blobs.add(oid);
+  }
+  return { patterns: [...new Set(patterns)], blobs };
+}
+
 /** Receive recorded selected Gitlinks; acquisition is allowed only during requested installation. */
 export async function receiveSelectedSources({ root, importerIds, environment, onOutput, materialize = false }) {
   const git = (cwd, ...args) => execute("git", args, { cwd, environment });
@@ -353,9 +374,6 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         // checkout can hydrate unrelated corpus bodies; cone mode also includes
         // ordinary files in ancestor directories, so it is not sufficient here.
         const selected = wanted.map(id => id === path ? "." : id.slice(path.length + 1));
-        if (selected.some(id => /[\\\r\n\0]/u.test(id))) throw new Error("selected source path cannot be represented by a literal sparse projection");
-        const literal = id => "/" + id.replace(/([*?\[\] ])/gu, "\\$1");
-        const patterns = selected.includes(".") ? ["/*"] : ["/.gitmodules", ...selected.map(id => literal(id) + "/")];
         const key = line.slice(0, line.search(/\s/u)).replace(/[.]path$/u, ".url");
         const url = (await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get", key)).trim();
         if (!/^(?:https:\/\/github[.]com\/|git@github[.]com:|ssh:\/\/git@github[.]com\/)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[.]git)?$/u.test(url)) throw new Error("selected mount needs its committed GitHub source URL");
@@ -382,13 +400,7 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         // --filter is a request: some servers warn and send an unfiltered pack.
         // A refused partial acquisition is retained, never certified or erased.
         if ((await objects()).some(row => row.endsWith(" blob"))) throw new Error("selected source transport did not honor blob:none; preserve the unreceived carrier");
-        const selectedBlobs = new Set((await git(target, "ls-tree", "-r", "-z", match[1])).split("\0").filter(Boolean).flatMap(row => {
-          const tab = row.indexOf("\t"), [mode, type, oid] = row.slice(0, tab).split(" "), file = row.slice(tab + 1);
-          // A selected descendant needs its ancestor Gitlink placeholder, but
-          // never the ordinary files beside that mount.
-          if (mode === "160000" && selected.some(id => id === file || id.startsWith(file + "/"))) patterns.push(literal(file));
-          return type === "blob" && (file === ".gitmodules" || selected.includes(".") || selected.some(id => file.startsWith(id + "/"))) ? [oid] : [];
-        }));
+        const { patterns, blobs: selectedBlobs } = selectedSourceProjection(await git(target, "ls-tree", "-r", "-z", match[1]), selected);
         await git(target, "sparse-checkout", "init", "--no-cone");
         await git(target, "sparse-checkout", "set", "--no-cone", "--", ...patterns);
         await execute("git", ["-c", "protocol.file.allow=never", "-c", "core.hooksPath=/dev/null", "checkout", "-q", "--detach", match[1]], { cwd: target, environment });
@@ -401,9 +413,7 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         });
         if(sparse.trim()==="true") {
           const selected=wanted.map(id=>id===path?".":id.slice(path.length+1));
-          if(selected.some(id=>/[\\\r\n\0]/u.test(id)))throw new Error("selected sparse path is not literal");
-          const literal=id=>"/"+id.replace(/([*?\[\] ])/gu,"\\$1");
-          const patterns=selected.includes(".")?["/*"]:["/.gitmodules",...selected.map(id=>literal(id)+"/")];
+          const { patterns } = selectedSourceProjection(await git(target, "ls-tree", "-r", "-z", match[1]), selected);
           // Extend this recorded source owner; never repin, reset or discard
           // already received paths when a later selection needs another face.
           await git(target,"sparse-checkout","add","--no-cone","--",...patterns);

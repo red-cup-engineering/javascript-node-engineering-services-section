@@ -44,36 +44,167 @@ async function optionalBytes(file) {
 
 async function sourceBinModes(root, importerIds) {
   const bins = new Map();
+  const sourceChanges = [];
   for (const id of importerIds) {
     const manifest = JSON.parse(await readFile(join(root, id, "package.json"), "utf8"));
     const entries = typeof manifest.bin === "string" ? [manifest.bin] : Object.values(manifest.bin ?? {});
+    if (entries.length) {
+      // Inspect the actual bin carriers in their owning repository. A broad
+      // parent status also reports unrelated untracked historical submodules.
+      if (entries.some(entry => typeof entry !== "string" || !entry)) throw new TypeError("source bin must name its file");
+      const changed = await execute("git", ["--literal-pathspecs", "-C", join(root, id), "status", "--porcelain=v1",
+        "--untracked-files=no", "--ignore-submodules=none", "--", ...entries]);
+      if (changed.trim()) sourceChanges.push({importerId: id, changes: changed.trim()});
+    }
     for (const entry of entries) {
       const file = resolve(root, id, entry);
       if (!contained(root, file)) throw new Error("source bin escapes the selected checkout");
-      const bytes = await optionalBytes(file);
-      if (bytes !== undefined) bins.set(file, { mode: (await stat(file)).mode & 0o777, hash: digest(bytes) });
+      const path = portable(relative(root, file));
+      // Check every ancestor and the declared target before its first byte read.
+      // Missing generated bins retain the existing optional-input behavior.
+      try { await regularSourceFile(root, path); }
+      catch (error) { if (error.cause?.code === "ENOENT") continue; throw error; }
+      const bytes = await readFile(file);
+      bins.set(file, { root, path, mode: (await stat(file)).mode & 0o777, hash: digest(bytes) });
     }
+  }
+  if (sourceChanges.length) {
+    const error = new Error("source bin packages have unreconciled tracked changes:\n" + sourceChanges.map(item => item.importerId + "\n" + item.changes).join("\n"));
+    error.sourceChanges = sourceChanges;
+    throw error;
   }
   return bins;
 }
 
 async function preserveSourceBinModes(bins) {
   for (const [file, original] of bins) {
+    if (await realpath(original.root) !== original.root) throw new Error("source bin root is redirected");
+    await regularSourceFile(original.root, original.path);
     assert.equal(digest(await readFile(file)), original.hash, "source bin changed during installation: " + file);
     const mode = (await stat(file)).mode & 0o777;
     if (mode !== original.mode) {
-      // pnpm links source bins and adds execute bits. Preserve the immutable
-      // checkout's modes; deployed copies receive their executable bin modes.
-      if ((mode & ~0o111) !== (original.mode & ~0o111)) throw new Error("source bin permissions changed beyond executable bits: " + file);
+      // PNPM 11.19's bin linker sets exactly 0755, including non-execute bits.
+      // Receive only that known normalization (or the existing execute-only
+      // change) on unchanged regular declared bins, then restore source custody.
+      if (mode !== 0o755 && (mode & ~0o111) !== (original.mode & ~0o111)) throw new Error("source bin permissions changed beyond executable bits: " + file + " (before " + original.mode.toString(8).padStart(4, "0") + ", after " + mode.toString(8).padStart(4, "0") + ")");
+      await regularSourceFile(original.root, original.path);
       await chmod(file, original.mode);
     }
   }
 }
 
-/** A portable deployment must not retain writable supplier inodes. */
+/** Refuse redirected source carriers before reading their bytes. */
+async function regularSourceFile(root, path) {
+  if (typeof path !== "string" || !path || isAbsolute(path) || path.includes("\0") || path.includes("\\")
+      || path.split(/[\\/]/u).some(part => !part || part === "." || part === "..")) {
+    throw new TypeError("source carrier needs a canonical relative path");
+  }
+  const parts = path.split("/");
+  let current = root;
+  for (const [index, part] of parts.entries()) {
+    current = join(current, part);
+    const entry = await lstat(current).catch(error => {
+      if (error.code === "ENOENT") throw new Error("selected source carrier is missing or not materialized: " + path, { cause: error });
+      throw error;
+    });
+    if (entry.isSymbolicLink() || (index === parts.length - 1 ? !entry.isFile() : !entry.isDirectory())) {
+      throw new Error("source carrier is redirected or not regular: " + path);
+    }
+  }
+  return current;
+}
+
+/** Verify the exact source, manifests and frozen lock bound by an installed receipt. */
+export async function verifyWorkspaceSelection(receipt, { environment = process.env } = {}) {
+  if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
+      || receipt.status !== "installed" || receipt.sourceConfigurationUnchanged !== true) {
+    throw new TypeError("an installed, unchanged workspace selection is required");
+  }
+  const root = await realpath(receipt.workspace);
+  if (root !== resolve(receipt.workspace)) throw new Error("selected source root is redirected");
+  // Establish the source-file boundary before the verifier's first byte read.
+  // Mount identity alone does not confine ordinary packages below that mount.
+  for (const id of receipt.importerIds) {
+    await regularSourceFile(root, id === "." ? "package.json" : id + "/package.json");
+  }
+  for (const name of Object.keys(receipt.sourceHashes)) await regularSourceFile(root, name);
+  for (const id of Object.keys(receipt.manifestHashes)) {
+    await regularSourceFile(root, id === "." ? "package.json" : id + "/package.json");
+  }
+  const artifact = await realpath(receipt.artifact);
+  if (artifact !== resolve(receipt.artifact)) throw new Error("selected receipt artifact is redirected");
+  await regularSourceFile(artifact, "pnpm-lock.yaml");
+  assert.equal((await execute("git", ["-C", root, "rev-parse", "HEAD"], { environment })).trim(), receipt.commit,
+    "selected source revision changed");
+  const sourceMounts = await receiveSelectedSources({ root, importerIds: receipt.importerIds, environment });
+  assert.deepEqual(sourceMounts, receipt.sourceMounts, "selected source mounts differ from their installed receipt");
+  assert.equal(digest(await readFile(join(receipt.artifact, "pnpm-lock.yaml"))), receipt.scopedLockSha256,
+    "selected frozen lock changed");
+  for (const [name, hash] of Object.entries(receipt.sourceHashes)) {
+    assert.equal(digest(await readFile(join(root, name))), hash, "source configuration changed: " + name);
+  }
+  for (const [id, hash] of Object.entries(receipt.manifestHashes)) {
+    assert.equal(digest(await readFile(join(root, id, "package.json"))), hash, "selected manifest changed: " + id);
+  }
+  // A matching manifest does not receive changed non-bin source bodies. Read
+  // tracked state at each selected repository, without refreshing its index.
+  // Untracked/generated payload inclusion remains the producer's separate
+  // obligation; a changed tracked build product needs attributed receiving.
+  const scopes = new Map();
+  for (const id of receipt.importerIds) {
+    const mount = sourceMounts.filter(row => id === row.path || id.startsWith(row.path + "/"))
+      .sort((a, b) => b.path.length - a.path.length)[0];
+    const directory = mount ? join(root, mount.path) : root;
+    const path = mount ? id === mount.path ? "." : id.slice(mount.path.length + 1) : id;
+    if (!scopes.has(directory)) scopes.set(directory, []);
+    scopes.get(directory).push(path);
+  }
+  const sourceState = [];
+  let omittedScopes = 0;
+  const observationEnvironment = { ...environment, GIT_OPTIONAL_LOCKS: "0" };
+  const mountIdentity = async mount => {
+    const parent = sourceMounts.filter(row => mount.path.startsWith(row.path + "/"))
+      .sort((a, b) => b.path.length - a.path.length)[0];
+    const parentDirectory = parent ? join(root, parent.path) : root;
+    const path = parent ? mount.path.slice(parent.path.length + 1) : mount.path;
+    return { path: mount.path, recordedCommit: mount.revision,
+      indexGitlink: await execute("git", ["-C", parentDirectory, "ls-files", "--stage", "--", path], { environment: observationEnvironment }),
+      actualCommit: (await execute("git", ["-C", join(root, mount.path), "rev-parse", "HEAD"], { environment: observationEnvironment })).trim() };
+  };
+  for (const [directory, paths] of scopes) {
+    const changes = await execute("git", ["-C", directory, "status", "--porcelain=v1",
+      "--untracked-files=no", "--ignore-submodules=untracked", "--", ...paths],
+    { environment: observationEnvironment });
+    if (!changes.trim()) continue;
+    // Git excludes untracked payload here while preserving tracked changes and
+    // changed gitlink heads. Keep bounded diagnostics for every actual refusal.
+    const allRecords = (await execute("git", ["-C", directory, "status", "--porcelain=v2", "-z",
+      "--untracked-files=no", "--ignore-submodules=untracked", "--", ...paths],
+    { environment: observationEnvironment })).split("\0").filter(Boolean);
+    if (sourceState.length === 8) { omittedScopes++; continue; }
+    const records = allRecords.slice(0, 24);
+    const scope = portable(relative(root, directory)) || ".";
+    const implicated = sourceMounts.filter(mount => mount.path === scope || records.some(record => {
+      const path = portable(relative(directory, join(root, mount.path)));
+      return record.startsWith("1 ") && record.split(" ")[2]?.startsWith("S") && record.endsWith(" " + path);
+    }));
+    sourceState.push({ scope, porcelainV1: changes.slice(0, 4096), porcelainV1Truncated: changes.length > 4096,
+      porcelainV2: records.map(record => record.slice(0, 1024)), omittedRecords: allRecords.length - records.length,
+      longRecordsTruncated: records.some(record => record.length > 1024),
+      mounts: await Promise.all(implicated.slice(0, 24).map(mountIdentity)), omittedMounts: Math.max(0, implicated.length - 24) });
+  }
+  if (sourceState.length) {
+    const error = new Error("selected source has tracked changes or nested submodule state; receive source or derived output before reuse:\n" + JSON.stringify({ scopes: sourceState, omittedScopes }, null, 2));
+    error.sourceState = sourceState;
+    throw error;
+  }
+  return root;
+}
+
+/** Separate PNPM deployment bytes from writable supplier inodes before sealing. */
 async function detachDeploymentLinks(directory) {
   let detached = 0;
-  const visit = async (base) => {
+  const visit = async base => {
     for (const entry of await readdir(base, { withFileTypes: true })) {
       const file = join(base, entry.name);
       if (entry.isSymbolicLink()) continue;
@@ -96,7 +227,7 @@ async function detachDeploymentLinks(directory) {
 }
 
 /** Reuse the frozen installation's scope for its actual generation or packing command. */
-export async function runWorkspaceSelection({ receipt, arguments: args, environment = process.env, onOutput } = {}) {
+export async function runWorkspaceSelection({ receipt, arguments: args, deployOutput, environment = process.env, onOutput } = {}) {
   if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
       || receipt.status !== "installed" || receipt.sourceConfigurationUnchanged !== true) {
     throw new TypeError("an installed, unchanged workspace selection is required");
@@ -107,22 +238,16 @@ export async function runWorkspaceSelection({ receipt, arguments: args, environm
   if (args.some(arg => /^(?:--(?:config\.)?(?:workspace-packages|lockfile-dir|dir)|-C)(?:=|$)/u.test(arg))) {
     throw new TypeError("a consumer command cannot replace the selected source or lock scope");
   }
-  const root = await realpath(receipt.workspace);
-  const deployTarget = args.includes("deploy") ? resolve(root, args.at(-1)) : undefined;
-  if (deployTarget !== undefined && (args.at(-1).startsWith("-") || contained(root, deployTarget))) throw new TypeError("portable deployment output must be outside its source checkout");
-  const verify = async () => {
-    assert.equal((await execute("git", ["-C", root, "rev-parse", "HEAD"], { environment })).trim(), receipt.commit,
-      "selected source revision changed");
-    assert.equal(digest(await readFile(join(receipt.artifact, "pnpm-lock.yaml"))), receipt.scopedLockSha256,
-      "selected frozen lock changed");
-    for (const [name, hash] of Object.entries(receipt.sourceHashes)) {
-      assert.equal(digest(await readFile(join(root, name))), hash, "source configuration changed: " + name);
-    }
-    for (const [id, hash] of Object.entries(receipt.manifestHashes)) {
-      assert.equal(digest(await readFile(join(root, id, "package.json"))), hash, "selected manifest changed: " + id);
-    }
-  };
-  await verify();
+  const root = await verifyWorkspaceSelection(receipt, { environment });
+  let output;
+  if (deployOutput !== undefined) {
+    if (typeof deployOutput !== "string" || !deployOutput) throw new TypeError("deploy output needs its explicit path");
+    output = resolve(deployOutput);
+    if (contained(root, output) || await realpath(dirname(output)) !== dirname(output)) throw new Error("deploy output must have a canonical parent outside source");
+    const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+    assert.deepEqual(args, ["--filter", manifest.name, "--config.ignore-scripts=true", "--config.inject-workspace-packages=true", "deploy", "--prod", output], "produced output requires the exact selected deploy invocation");
+    try { await lstat(output); throw new Error("deploy output already exists"); } catch (error) { if (error.code !== "ENOENT") throw error; }
+  }
   const scope = receipt.importerIds.filter(id => id !== ".").map(id => "--workspace-packages=" + id);
   // `run` does not expose install's --lockfile-dir CLI flag; the maintained
   // pnpm config namespace carries this same setting across both commands.
@@ -130,15 +255,26 @@ export async function runWorkspaceSelection({ receipt, arguments: args, environm
   const bins = await sourceBinModes(root, receipt.importerIds);
   try { await execute(receipt.executable, command, { cwd: root, environment, onOutput }); }
   finally { await preserveSourceBinModes(bins); }
-  await verify();
+  let produced;
   let detachedFiles;
-  if (deployTarget !== undefined) {
-    detachedFiles = await detachDeploymentLinks(await realpath(deployTarget));
-    await verify();
+  if (output !== undefined) {
+    if (await realpath(output) !== output || !(await lstat(output)).isDirectory()) throw new Error("deploy output is redirected");
+    detachedFiles = await detachDeploymentLinks(output);
+    const files = [];
+    // These are PNPM deployFromSharedLockfile's documented root products, not
+    // a caller-selected file inventory. Preserve optional-file absence too.
+    for (const path of ["package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml"]) {
+      const file = join(output, path);
+      const entry = await lstat(file).catch(error => { if (error.code === "ENOENT" && path === "pnpm-workspace.yaml") return null; throw error; });
+      if (entry && !entry.isFile()) throw new Error("deploy metadata must be a regular nonredirected file: " + path);
+      files.push({ path, sha256: entry ? digest(await readFile(file)) : null });
+    }
+    produced = { directory: output, files };
   }
+  await verifyWorkspaceSelection(receipt, { environment });
   return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,
     executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true,
-    ...(detachedFiles === undefined ? {} : { detachedFiles, supplierInodesSeparated: true }) };
+    ...(produced ? { produced, detachedFiles, supplierInodesSeparated: true } : {}) };
 }
 
 /** Select source importers by following committed links, without discovering unrelated projects. */
@@ -169,13 +305,13 @@ export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace 
   return [...selected].sort();
 }
 
-/** Materialize only recorded Gitlinks containing selected source paths; never advance existing mounts. */
-export async function materializeSelectedSources({ root, importerIds, environment, onOutput }) {
+/** Receive recorded selected Gitlinks; acquisition is allowed only during requested installation. */
+export async function receiveSelectedSources({ root, importerIds, environment, onOutput, materialize = false }) {
   const git = (cwd, ...args) => execute("git", args, { cwd, environment });
   const sparse = await git(root, "config", "--bool", "core.sparseCheckout").catch((error) => {
     if (error.exitCode === 1) return "false"; throw error;
   });
-  if (sparse.trim() === "true") {
+  if (materialize && sparse.trim() === "true") {
     // Root-owned instance data and agency carriers are package files too. A
     // source selection which keeps only nested importers silently drops them.
     const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
@@ -190,6 +326,7 @@ export async function materializeSelectedSources({ root, importerIds, environmen
   async function receive(repository, paths) {
     const hasModules = await git(repository, "ls-tree", "HEAD", "--", ".gitmodules");
     if (!hasModules.trim()) return;
+    await regularSourceFile(root, portable(relative(root, join(repository, ".gitmodules"))));
     assert.deepEqual(await readFile(join(repository, ".gitmodules")), Buffer.from(await git(repository, "show", "HEAD:.gitmodules")), "mount configuration differs from recorded source");
     const lines = await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get-regexp", "[.]path$").catch((error) => {
       if (error.exitCode === 1) return ""; throw error;
@@ -208,8 +345,42 @@ export async function materializeSelectedSources({ root, importerIds, environmen
       const status = await git(repository, "submodule", "status", "--", path);
       if (status.startsWith("+") || status.startsWith("U")) throw new Error("selected mount differs from recorded source; preserve and reconcile it: " + path);
       if (status.startsWith("-")) {
+        if (!materialize) throw new Error("selected mount is not materialized: " + path);
         onOutput?.("Materializing selected Gitlink: " + portable(relative(root, target)) + "\n");
-        await execute("git", ["-c", "protocol.file.allow=never", "submodule", "update", "--init", "--checkout", "--", path], { cwd: repository, environment });
+        // Set the literal package projection BEFORE checkout. A full owner
+        // checkout can hydrate unrelated corpus bodies; cone mode also includes
+        // ordinary files in ancestor directories, so it is not sufficient here.
+        const selected = wanted.map(id => id === path ? "." : id.slice(path.length + 1));
+        if (selected.some(id => /[\\\r\n\0]/u.test(id))) throw new Error("selected source path cannot be represented by a literal sparse projection");
+        const literal = id => "/" + id.replace(/([*?\[\] ])/gu, "\\$1");
+        const patterns = selected.includes(".") ? ["/*"] : ["/.gitmodules", ...selected.map(id => literal(id) + "/")];
+        const key = line.slice(0, line.search(/\s/u)).replace(/[.]path$/u, ".url");
+        const url = (await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get", key)).trim();
+        if (!/^(?:https:\/\/github[.]com\/|git@github[.]com:|ssh:\/\/git@github[.]com\/)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[.]git)?$/u.test(url)) throw new Error("selected mount needs its committed GitHub source URL");
+        if (await realpath(dirname(target)) !== dirname(target)) throw new Error("selected mount parent is redirected");
+        const existing = await lstat(target).catch(error => { if (error.code === "ENOENT") return null; throw error; });
+        if (existing && (!existing.isDirectory() || (await readdir(target)).length)) throw new Error("unreceived selected mount holds existing contents; preserve and reconcile it: " + path);
+        await execute("git", ["submodule", "init", "--", path], { cwd: repository, environment });
+        await git(repository, "init", "-q", target);
+        await git(target, "remote", "add", "origin", url);
+        await git(target, "config", "remote.origin.promisor", "true");
+        await git(target, "config", "remote.origin.partialclonefilter", "blob:none");
+        await execute("git", ["-c", "protocol.file.allow=never", "-c", "core.hooksPath=/dev/null", "fetch", "--quiet", "--depth=1", "--no-tags", "--filter=blob:none", "origin", match[1]], { cwd: target, environment });
+        const objects = async () => (await git(target, "cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype)")).trim().split("\n").filter(Boolean);
+        // --filter is a request: some servers warn and send an unfiltered pack.
+        // A refused partial acquisition is retained, never certified or erased.
+        if ((await objects()).some(row => row.endsWith(" blob"))) throw new Error("selected source transport did not honor blob:none; preserve the unreceived carrier");
+        const selectedBlobs = new Set((await git(target, "ls-tree", "-r", "-z", match[1])).split("\0").filter(Boolean).flatMap(row => {
+          const tab = row.indexOf("\t"), [mode, type, oid] = row.slice(0, tab).split(" "), file = row.slice(tab + 1);
+          // A selected descendant needs its ancestor Gitlink placeholder, but
+          // never the ordinary files beside that mount.
+          if (mode === "160000" && selected.some(id => id === file || id.startsWith(file + "/"))) patterns.push(literal(file));
+          return type === "blob" && (file === ".gitmodules" || selected.includes(".") || selected.some(id => file.startsWith(id + "/"))) ? [oid] : [];
+        }));
+        await git(target, "sparse-checkout", "init", "--no-cone");
+        await git(target, "sparse-checkout", "set", "--no-cone", "--", ...patterns);
+        await execute("git", ["-c", "protocol.file.allow=never", "-c", "core.hooksPath=/dev/null", "checkout", "-q", "--detach", match[1]], { cwd: target, environment });
+        if ((await objects()).some(row => row.endsWith(" blob") && !selectedBlobs.has(row.split(" ")[0]))) throw new Error("selected checkout received blobs outside its package projection; preserve the unreceived carrier");
       }
       assert.equal((await git(target, "rev-parse", "HEAD")).trim(), match[1], "selected mount source changed: " + path);
       mounts.push({ path: portable(relative(root, target)), revision: match[1] });
@@ -339,7 +510,7 @@ export async function installWorkspaceSelection({
           sourceImporterCount: Object.keys(sourceLock.importers).length, sourceConfigurationUnchanged: true,
           elapsedMilliseconds: Date.now() - startedAt };
       }
-      if (materializeSources) sourceMounts = await materializeSelectedSources({ root, importerIds, environment, onOutput });
+      if (materializeSources) sourceMounts = await receiveSelectedSources({ root, importerIds, environment, onOutput, materialize: true });
       const sourceChanges = await git("status", "--porcelain=v1", "--untracked-files=normal", "--", "package.json", "pnpm-workspace.yaml", "pnpm-lock.yaml", ".npmrc", ...importerIds.filter((id) => id !== "."));
       if (sourceChanges.trim()) throw new Error("selected source has local changes; preserve and reconcile it before locked installation");
     } else {
@@ -350,6 +521,9 @@ export async function installWorkspaceSelection({
         return portable(relative(root, resolve(path))) || ".";
       })])].sort();
     }
+    // Even already-materialized and selector-based installs record the same
+    // committed mount custody which later build/pack commands must re-receive.
+    if (!materializeSources) sourceMounts = await receiveSelectedSources({ root, importerIds, environment });
     const workspaceArgs = importerIds.filter((id) => id !== ".").map((id) => "--workspace-packages=" + id);
     const scopedProjects = JSON.parse(await runPnpm([...workspaceArgs, "list", "--recursive", "--depth=-1", "--json"]));
     assert.deepEqual(scopedProjects.map(({ path }) => portable(relative(root, path)) || ".").sort(), importerIds, "explicit pnpm workspace scope differs from selection");

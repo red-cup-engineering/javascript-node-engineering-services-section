@@ -90,7 +90,9 @@ function shell(command, cwd, environment) {
   });
 }
 
-const commonDirOf = (repository) => resolve(repository, execFileSync("git", ["rev-parse", "--git-common-dir"], { cwd: repository }).toString().trim());
+// Submodule repositories belong to this worktree. The shared common directory
+// holds root objects, but not the linked worktree’s initialized modules.
+const gitDirOf = (repository) => execFileSync("git", ["rev-parse", "--absolute-git-dir"], { cwd: repository }).toString().trim();
 const expandHome = (command, home) => command.replace(/(^|\s)~\//gu, `$1${home}/`);
 // What the package manager said about its refusal, without the cyclic-workspace warning that
 // leads every run of this workspace.
@@ -104,7 +106,7 @@ const saidOf = (output) => output.split("\n").filter((line) => line.trim() && !/
 async function overManifests({ repository, commit, command, home = process.env.HOME, environment = process.env }) {
   const scratch = mkdtempSync(join(tmpdir(), "workspace-lockfile-"));
   try {
-    extractWorkspaceManifests(commonDirOf(repository), commit, scratch);
+    extractWorkspaceManifests(gitDirOf(repository), commit, scratch);
     const { code, output } = await shell(expandHome(command, home), scratch, environment);
     const lockfile = (() => { try { return readFileSync(join(scratch, LOCKFILE)); } catch { return null; } })();
     return { code, said: saidOf(output), lockfile };

@@ -12,7 +12,8 @@
     "./job": "./src/node-job.mjs",
     "./integrate": "./src/integrate.mjs",
     "./service": "./src/node-service.mjs",
-    "./source-delivery": "./src/source-delivery.mjs"
+    "./source-delivery": "./src/source-delivery.mjs",
+    "./compile-node-runtime": "./src/compile-node-runtime.mjs"
   },
   "bin": {
     "promote-node-runtime-release": "./scripts/promote-node-runtime-release.mjs",

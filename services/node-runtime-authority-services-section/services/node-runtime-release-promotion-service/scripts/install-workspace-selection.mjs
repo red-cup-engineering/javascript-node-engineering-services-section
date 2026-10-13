@@ -3,7 +3,7 @@ import { installWorkspaceSelection } from "../src/install-workspace-selection.mj
 import { writeFile, rename, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const usage = "node install-workspace-selection.mjs --workspace <git-checkout> (--selector <pnpm-filter> | --importer <source-path>...) --state-dir <outside-checkout> [--store-dir <path>] [--pnpm <executable>] [--revision <commit>] [--prepare-only | --plan-only] [--materialize-sources]";
+const usage = "node install-workspace-selection.mjs --workspace <git-checkout> (--selector <pnpm-filter> | --importer <source-path>...) --state-dir <outside-checkout> [--store-dir <path>] [--pnpm <executable>] [--revision <commit>] [--prepare-only | --plan-only] [--materialize-sources] [--receipt <output-file>]";
 const args = process.argv.slice(2);
 if (args.includes("--help")) {
   console.log(usage);

@@ -136,6 +136,25 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
   for (const [id, hash] of Object.entries(receipt.manifestHashes)) {
     assert.equal(digest(await readFile(join(root, id, "package.json"))), hash, "selected manifest changed: " + id);
   }
+  // A matching manifest does not receive changed non-bin source bodies. Read
+  // tracked state at each selected repository, without refreshing its index.
+  // Untracked/generated payload inclusion remains the producer's separate
+  // obligation; a changed tracked build product needs attributed receiving.
+  const scopes = new Map();
+  for (const id of receipt.importerIds) {
+    const mount = sourceMounts.filter(row => id === row.path || id.startsWith(row.path + "/"))
+      .sort((a, b) => b.path.length - a.path.length)[0];
+    const directory = mount ? join(root, mount.path) : root;
+    const path = mount ? id === mount.path ? "." : id.slice(mount.path.length + 1) : id;
+    if (!scopes.has(directory)) scopes.set(directory, []);
+    scopes.get(directory).push(path);
+  }
+  for (const [directory, paths] of scopes) {
+    const changes = await execute("git", ["-C", directory, "status", "--porcelain=v1",
+      "--untracked-files=no", "--ignore-submodules=none", "--", ...paths],
+    { environment: { ...environment, GIT_OPTIONAL_LOCKS: "0" } });
+    if (changes.trim()) throw new Error("selected source has tracked changes; receive source or derived output before reuse:\n" + changes.trim());
+  }
   return root;
 }
 

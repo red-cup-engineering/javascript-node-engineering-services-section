@@ -276,7 +276,7 @@ case "$2" in
     test -f "$HOME/stopped" || exit 1
     case "$4" in
       --property=ActiveState) printf 'inactive\\n';;
-      --property=MainPID) printf '0\\n';;
+      --property=MainPID|--property=ControlPID) printf '0\\n';;
     esac
     ;;
   restart) rm -f "$HOME/stopped";;
@@ -494,5 +494,83 @@ test('independent runtime source survives three unrelated platform promotions', 
     assert.notEqual(await readlink(join(root, 'previous')), digest);
     assert.equal(await readFile(join(root, 'runtimes/game.service/app/server.mjs'), 'utf8'), "export default 'first';\n");
     assert.ok((await stat(join(root, digest))).isDirectory());
+  } finally { await rm(work.root, { recursive: true, force: true }); }
+});
+
+// Exercise the real release consumer and local archive/materialization path.
+// Only the Guix command boundary is supplied: no Guix build, service operation,
+// promotion or host connection is part of this admission-only qualification.
+async function guixAdmissionFixture(override = {}) {
+  const guix = { channels: 'channels.scm', driver: 'driver.scm', loadPath: 'src', package: 'deployment.scm' };
+  const work = await fixture({ ...baseSpec('http://127.0.0.1:18807/healthz'), guix });
+  const program = join(work.home, 'bin/guix');
+  await writeFile(program, `#!${process.execPath}
+import { appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(process.env.HOME + '/guix-commands.jsonl', JSON.stringify(args) + '\\n');
+if (args[args.indexOf('--', args.indexOf('--') + 1) + 2] !== 'build') process.exit(73);
+const receipt = { storePath: '/gnu/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-admission-fixture-1', root: args.at(-1), narSha256: 'b'.repeat(64), ...${JSON.stringify(override)} };
+process.stdout.write(JSON.stringify(receipt) + '\\n');
+`);
+  await chmod(program, 0o755);
+  return work;
+}
+
+async function admitGuix(work) {
+  const script = join(work.repository, 'release-service/scripts/release-git-commit.mjs');
+  const { releaseGitCommit } = await import(pathToFileURL(script));
+  return releaseGitCommit({
+    specPath: join(work.repository, 'release.json'), localHome: work.home, admit: true,
+    environment: { ...process.env, HOME: work.home, PATH: `${join(work.home, 'bin')}:${process.env.PATH}` },
+    beforePromotion() { throw new Error('admission reached promotion'); }, onStep() {},
+  });
+}
+
+test('Guix admission retains the exact build receipt without promotion', async () => {
+  const work = await guixAdmissionFixture();
+  try {
+    const result = await admitGuix(work);
+    assert.equal(result.admitted, true);
+    assert.deepEqual(result.guix, {
+      storePath: '/gnu/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-admission-fixture-1',
+      root: join(work.home, '.local/releases/guix/admitted-' + result.materialized.artifactDigest),
+      narSha256: 'b'.repeat(64),
+    });
+    assert.equal(result.release, result.guix.storePath);
+    const commands = (await readFile(join(work.home, 'guix-commands.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
+    assert.equal(commands.length, 1);
+    assert.ok(commands[0].includes('build'));
+    assert.ok(!commands[0].some(arg => ['activate', 'rollback'].includes(arg)));
+    await assert.rejects(readlink(join(work.home, '.local/releases/current')), { code: 'ENOENT' });
+    await assert.rejects(readFile(join(work.home, 'restart-witness')), { code: 'ENOENT' });
+  } finally { await rm(work.root, { recursive: true, force: true }); }
+});
+
+for (const [name, override] of [
+  ['missing NAR digest', { narSha256: null }],
+  ['malformed NAR digest', { narSha256: 'unverified' }],
+  ['non-store artifact', { storePath: '/tmp/unsealed-candidate' }],
+  ['noncanonical store artifact', { storePath: '/gnu/store/../unsealed-candidate' }],
+  ['nested artifact path', { storePath: '/gnu/store/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa-fixture/subdir' }],
+  ['different retained root', { root: '/tmp/another-root' }],
+]) test(`Guix admission refuses ${name} before promotion`, async () => {
+  const work = await guixAdmissionFixture(override);
+  try {
+    await assert.rejects(admitGuix(work), /Guix build receipt/);
+    await assert.rejects(readlink(join(work.home, '.local/releases/current')), { code: 'ENOENT' });
+    await assert.rejects(readFile(join(work.home, 'restart-witness')), { code: 'ENOENT' });
+  } finally { await rm(work.root, { recursive: true, force: true }); }
+});
+
+test('non-Guix admission retains its existing result and performs no promotion', async () => {
+  const work = await fixture(baseSpec('http://127.0.0.1:18807/healthz'));
+  try {
+    const result = await admitGuix(work);
+    assert.equal(result.admitted, true);
+    assert.equal(Object.hasOwn(result, 'guix'), false);
+    assert.equal(result.release, '.local/releases/' + result.materialized.artifactDigest);
+    await assert.rejects(readFile(join(work.home, 'guix-commands.jsonl')), { code: 'ENOENT' });
+    await assert.rejects(readlink(join(work.home, '.local/releases/current')), { code: 'ENOENT' });
+    await assert.rejects(readFile(join(work.home, 'restart-witness')), { code: 'ENOENT' });
   } finally { await rm(work.root, { recursive: true, force: true }); }
 });

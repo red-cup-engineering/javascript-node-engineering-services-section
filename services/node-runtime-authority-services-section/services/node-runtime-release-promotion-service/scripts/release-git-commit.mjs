@@ -587,17 +587,26 @@ const guixCommand = (tree, arguments_) => {
   const at = (path) => local ? resolve(localHome, tree, path) : tree + "/" + path;
   return ["guix", "time-machine", "-C", at(spec.guix.channels), "--", "repl", "--", at(spec.guix.driver), ...arguments_].map(quote).join(" ");
 };
-let guixStore;
+let guixBuild;
 if (spec.guix) {
   const at = (path) => local ? resolve(localHome, release, path) : release + "/" + path;
   const root = spec.releaseRoot + "/guix/admitted-" + materialized.artifactDigest;
+  const buildRoot = local ? resolve(localHome, root) : root;
   await run("mkdir -p " + quote(spec.releaseRoot + "/guix"));
   const built = await timed("Guix closure", () => jsonStep(guixCommand(release, [
     "build", at(spec.guix.channels), at(spec.guix.loadPath), at(spec.guix.package),
-    local ? resolve(localHome, release) : release, local ? resolve(localHome, root) : root,
+    local ? resolve(localHome, release) : release, buildRoot,
   ]), spec.releaseRoot + "/.guix-build-" + commit + ".json"));
-  guixStore = built.storePath;
-  release = guixStore;
+  // Preserve the owning driver's storePath/root/narSha256 result. Receiving its
+  // shape is not independent store verification or authority to promote it.
+  if (!built || typeof built.storePath !== "string" || !built.storePath.startsWith("/gnu/store/") ||
+      resolve(built.storePath) !== built.storePath || built.storePath.slice("/gnu/store/".length).includes("/") ||
+      built.storePath === "/gnu/store/" || built.root !== buildRoot ||
+      typeof built.narSha256 !== "string" || !/^[a-f0-9]{64}$/u.test(built.narSha256)) {
+    throw new Error("Guix build receipt does not bind the requested root, store output and NAR SHA256");
+  }
+  guixBuild = { storePath: built.storePath, root: built.root, narSha256: built.narSha256 };
+  release = guixBuild.storePath;
   runtime = quote(release + "/bin/node");
 }
 // Everything the new release needs to start is checked before `current` moves.
@@ -655,7 +664,7 @@ const entrancePlans = entranceRuntime === undefined ? undefined : await timed("e
 }));
 if (admit) {
   onStep(`admitted ${commit} as ${materialized.artifactDigest}`);
-  return { commit, release, materialized, admitted: true };
+  return { commit, release, materialized, admitted: true, ...(guixBuild ? { guix: guixBuild } : {}) };
 }
 if (beforePromotion) await beforePromotion({ commit, digest: materialized.artifactDigest });
 // Capture the old target before the state transition, including promotion failures that occur
@@ -758,7 +767,7 @@ try {
   }
   promotionAttempted = true;
   promoted = spec.guix ? await jsonStep(guixCommand(release, [
-    "activate", release + "/" + spec.guix.channels, guixStore,
+    "activate", release + "/" + spec.guix.channels, guixBuild.storePath,
     local ? resolve(localHome, spec.releaseRoot, "current") : spec.releaseRoot + "/current",
   ]), spec.releaseRoot + "/.promotion-" + commit + ".json") : await jsonStep(
     `${runtime} ${quote(`${release}/${scripts}/promote-node-runtime-release.mjs`)} --release-root ${quote(spec.releaseRoot)} --digest ${materialized.artifactDigest} --receipt-root ${quote(spec.receiptRoot)}${materialized.reused ? "" : ` --commit ${quote(commit)}`} --derived ${quote(JSON.stringify(spec.derived ?? []))}`,
@@ -803,7 +812,7 @@ if (spec.health) onStep(`healthy: ${spec.health}`);
 if (spec.guix) {
   if (materialized.artifactDigest !== running) await run("rm -rf -- " + quote(preparedRelease));
   await run("rm -f -- " + quote(spec.releaseRoot + "/guix/admitted-" + materialized.artifactDigest));
-  return { commit, release, materialized, promoted, guix: { storePath: guixStore } };
+  return { commit, release, materialized, promoted, guix: guixBuild };
 }
 // Every independent process retains its own immutable tree beyond platform rollback history.
 const runtimeTargets = local ? await retainedRuntimeTargets(resolve(localHome, spec.releaseRoot)) : [];

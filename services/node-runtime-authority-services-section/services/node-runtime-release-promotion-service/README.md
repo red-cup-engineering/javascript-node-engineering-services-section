@@ -192,3 +192,20 @@ effect only after consumer acceptance and current authority. Reconstructing the
 same delivery retains the same commit and candidate name; independent receiving
 still judges it against current source. Candidate identity is not semantic proof
 or deployed-operation evidence.
+
+### Select source before materialization
+
+Use repeated `--importer <repository-relative-path>` instead of `--selector` to follow workspace `link:` edges in the committed lock, including root dependencies, before project discovery. This is source selection over resolved pins; pnpm still owns lock parsing, external graph filtering, supply policy and installation. `--revision <full-commit>` binds the checkout identity.
+
+`--plan-only` reports that closure without materializing source or installing application dependencies. `--materialize-sources` adds the selected directories to an existing sparse checkout and initializes only recorded Gitlinks containing those importers, descending into selected nested mounts. It never recursively initializes unrelated children or advances an existing divergent mount. Modified mount configuration, staged pins and local selected-source changes are refused. Generated tooling and scoped locks stay outside the checkout.
+
+On the actual four-corpus dependency proposal, the fresh sparse RelConLang selection contained 217 of 803 importers and 17 source Gitlinks; an ordinary full recursive checkout initialized 90. The selected frozen install preserved the source configuration, and the real CLI returned its 12,312-byte language manifest exactly. These observations receive that consumer preparation, not HTTP deployment or registry publication.
+
+After a frozen selected install, use `run-workspace-selection <install-receipt> -- <pnpm arguments>` for generation and packing. It reuses the recorded explicit workspace paths and lock directory and refuses a changed revision, configuration, manifest or lock. This prevents subsequent pnpm commands from falling back to unrelated workspace discovery or silently performing a different install. The command does not establish runtime receiving.
+
+### Observe selected deploy products
+
+The programmatic `runWorkspaceSelection` API optionally takes `deployOutput` for the exact selected-root `--filter <name> --config.ignore-scripts=true --config.inject-workspace-packages=true deploy --prod <absolute-output>` invocation. The output must be absent, outside source, and under an existing canonical parent. Generic commands and the CLI keep their existing receipt shape.
+
+After successful execution, the existing command receipt records `produced.directory` and `produced.files`: SHA-256 identities of regular nonredirected `package.json`, `pnpm-lock.yaml`, and optional `pnpm-workspace.yaml`. Optional absence is a null hash. The selection is revalidated after observation; failure returns no successful receipt and leaves partial-output cleanup to the enclosing caller. These are PNPM's observed root products, not a caller-selected inventory. The consumer must compare them before accepting normalized root metadata. They do not prove all generated runtime bodies, dependency semantics, native receiving or activation. The caller retains its existing exclusive source/build lease.
+

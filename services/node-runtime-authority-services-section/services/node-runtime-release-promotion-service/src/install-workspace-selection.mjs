@@ -426,7 +426,7 @@ export function deriveWorkspaceOnlyImporter({lockfile, importerId, manifest, pro
   const canonical = path => typeof path === "string" && path && !isAbsolute(path) && !/[\\\0]/u.test(path)
     && (path === "." || path.split("/").every(part => part && part !== "." && part !== ".."));
   if (!canonical(importerId) || typeof manifest?.name !== "string") throw new TypeError("canonical importer and manifest required");
-  const importer = {specifiers:{}}, used = [];
+  const importer = {dependencies:undefined, devDependencies:undefined, optionalDependencies:undefined, specifiers:{}}, used = [];
   for (const field of fields) for (const [name, specifier] of Object.entries(manifest[field] ?? {})) {
     if (field !== "dependencies" && name in (manifest.dependencies ?? {})) continue;
     if (specifier !== "workspace:*") throw new TypeError("workspace-only derivation cannot resolve registry or version demand: " + name);

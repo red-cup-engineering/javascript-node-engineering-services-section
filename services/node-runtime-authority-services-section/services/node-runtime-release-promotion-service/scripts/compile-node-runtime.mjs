@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { build } from "esbuild";
-import { existsSync, globSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, join, resolve, relative, isAbsolute } from "node:path";
+import { existsSync, globSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { join, resolve, relative, isAbsolute } from "node:path";
 
 const args = process.argv.slice(2);
 const entries = [];
@@ -56,9 +56,10 @@ if (selection !== undefined) {
           const file = join(root, "package.json");
           if (!existsSync(file)) continue;
           const manifest = JSON.parse(readFileSync(file, "utf8")), source = selected.get(manifest.name);
-          if (!source || seen.has(root)) continue;
+          const identity = realpathSync(root);
+          if (!source || seen.has(identity)) continue;
           if (manifest.version !== source.manifest.version) throw new TypeError("packed package differs from selected version: " + manifest.name);
-          seen.add(root); carrier(root, manifest);
+          seen.add(identity); carrier(identity, manifest);
         }
       }
     }

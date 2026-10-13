@@ -173,33 +173,14 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
   };
   for (const [directory, paths] of scopes) {
     const changes = await execute("git", ["-C", directory, "status", "--porcelain=v1",
-      "--untracked-files=no", "--ignore-submodules=none", "--", ...paths],
+      "--untracked-files=no", "--ignore-submodules=untracked", "--", ...paths],
     { environment: observationEnvironment });
     if (!changes.trim()) continue;
-    // Porcelain v1 collapses nested untracked and tracked changes to M. Keep
-    // its original spacing and expose v2 flags/modes without reading file bodies.
+    // Git excludes untracked payload here while preserving tracked changes and
+    // changed gitlink heads. Keep bounded diagnostics for every actual refusal.
     const allRecords = (await execute("git", ["-C", directory, "status", "--porcelain=v2", "-z",
-      "--untracked-files=no", "--ignore-submodules=none", "--", ...paths],
+      "--untracked-files=no", "--ignore-submodules=untracked", "--", ...paths],
     { environment: observationEnvironment })).split("\0").filter(Boolean);
-    // Untracked files are outside this tracked-source check. Git propagates
-    // their state through parent gitlinks even with --untracked-files=no.
-    // Accept only exact untracked-only records for already authenticated mounts;
-    // never infer clean tracked state from a diagnostic cap or an unknown record.
-    let untrackedOnly = allRecords.length > 0;
-    for (const record of allRecords) {
-      const mount = sourceMounts.find(row => record === "1 .M S..U 160000 160000 160000 "
-        + row.revision + " " + row.revision + " " + portable(relative(directory, join(root, row.path))));
-      if (!mount) { untrackedOnly = false; break; }
-      const identity = await mountIdentity(mount);
-      const parent = sourceMounts.filter(row => mount.path.startsWith(row.path + "/"))
-        .sort((a, b) => b.path.length - a.path.length)[0];
-      const path = parent ? mount.path.slice(parent.path.length + 1) : mount.path;
-      if (identity.actualCommit !== mount.revision
-          || identity.indexGitlink !== "160000 " + mount.revision + " 0\t" + path + "\n") {
-        untrackedOnly = false; break;
-      }
-    }
-    if (untrackedOnly) continue;
     if (sourceState.length === 8) { omittedScopes++; continue; }
     const records = allRecords.slice(0, 24);
     const scope = portable(relative(root, directory)) || ".";

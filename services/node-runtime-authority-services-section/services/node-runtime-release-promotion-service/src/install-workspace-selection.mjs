@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 const toolchainSource = resolve(dirname(fileURLToPath(import.meta.url)), "../data/selected-install-tools");
 const fields = ["dependencies", "devDependencies", "optionalDependencies"];
 const policyNames = [
+  "registry",
   "minimumReleaseAge", "minimumReleaseAgeExclude", "minimumReleaseAgeIgnoreMissingTime",
   "minimumReleaseAgeStrict", "trustPolicy", "trustPolicyExclude", "trustPolicyIgnoreAfter",
   "trustLockfile", "blockExoticSubdeps", "verifyStoreIntegrity", "strictStorePkgContentCheck",

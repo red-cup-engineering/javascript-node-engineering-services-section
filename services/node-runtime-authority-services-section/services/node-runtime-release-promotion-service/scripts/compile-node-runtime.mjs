@@ -2,7 +2,6 @@
 import { build } from "esbuild";
 import { existsSync, globSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { join, resolve, relative, isAbsolute } from "node:path";
-import { createRequire } from "node:module";
 
 const args = process.argv.slice(2);
 const entries = [];
@@ -74,11 +73,13 @@ if (!entries.length) throw new TypeError("at least one runtime entrance is requi
 await build({ entryPoints: [...new Set(entries)], bundle: true, write: false, outdir: "compiled-runtime", preserveSymlinks,
   platform: "node", format: "esm", target: "node24", logLevel: "error",
   plugins: [{ name: "installed-third-party-boundaries", setup(builder) {
-    builder.onResolve({ filter: /^(?:@[^/]+\/)?[^./][^:]*$/ }, (args) => {
+    builder.onResolve({ filter: /^(?:@[^/]+\/)?[^./][^:]*$/ }, async (args) => {
+      if (args.pluginData?.installedVendor === true) return;
       if (args.path.startsWith("@red-cup-engineering/") || args.path.startsWith("@lenticule-science/")) return;
       // These packages run in their installed Node layout. Inlining a vendor's
       // generated bundle changes optional and native binding semantics.
-      createRequire(args.importer).resolve(args.path);
+      const resolved = await builder.resolve(args.path, { resolveDir: args.resolveDir, kind: args.kind, pluginData: { installedVendor: true } });
+      if (resolved.errors.length) return { errors: resolved.errors };
       return { path: args.path, external: true };
     });
   } }],

@@ -108,6 +108,8 @@ export async function runWorkspaceSelection({ receipt, arguments: args, environm
     throw new TypeError("a consumer command cannot replace the selected source or lock scope");
   }
   const root = await realpath(receipt.workspace);
+  const deployTarget = args.includes("deploy") ? resolve(root, args.at(-1)) : undefined;
+  if (deployTarget !== undefined && (args.at(-1).startsWith("-") || contained(root, deployTarget))) throw new TypeError("portable deployment output must be outside its source checkout");
   const verify = async () => {
     assert.equal((await execute("git", ["-C", root, "rev-parse", "HEAD"], { environment })).trim(), receipt.commit,
       "selected source revision changed");
@@ -130,10 +132,8 @@ export async function runWorkspaceSelection({ receipt, arguments: args, environm
   finally { await preserveSourceBinModes(bins); }
   await verify();
   let detachedFiles;
-  if (args.includes("deploy")) {
-    const target = args.at(-1);
-    if (target.startsWith("-") || contained(root, resolve(root, target))) throw new TypeError("portable deployment output must be outside its source checkout");
-    detachedFiles = await detachDeploymentLinks(await realpath(resolve(root, target)));
+  if (deployTarget !== undefined) {
+    detachedFiles = await detachDeploymentLinks(await realpath(deployTarget));
     await verify();
   }
   return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,

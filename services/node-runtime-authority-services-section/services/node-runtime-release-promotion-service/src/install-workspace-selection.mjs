@@ -357,7 +357,19 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         const key = line.slice(0, line.search(/\s/u)).replace(/[.]path$/u, ".url");
         const url = (await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get", key)).trim();
         if (!/^(?:https:\/\/github[.]com\/|git@github[.]com:|ssh:\/\/git@github[.]com\/)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[.]git)?$/u.test(url)) throw new Error("selected mount needs its committed GitHub source URL");
-        if (await realpath(dirname(target)) !== dirname(target)) throw new Error("selected mount parent is redirected");
+        // Sparse source can omit the mount's ordinary ancestors. Create only
+        // those directories, checking each before descending; never hydrate
+        // their unselected files or follow a redirected ancestor.
+        let parent = root;
+        for (const part of relative(root, dirname(target)).split(sep).filter(Boolean)) {
+          parent = join(parent, part);
+          let entry = await lstat(parent).catch(error => { if (error.code === "ENOENT") return null; throw error; });
+          if (entry === null) {
+            await mkdir(parent);
+            entry = await lstat(parent);
+          }
+          if (!entry.isDirectory() || entry.isSymbolicLink() || await realpath(parent) !== parent) throw new Error("selected mount parent is redirected");
+        }
         const existing = await lstat(target).catch(error => { if (error.code === "ENOENT") return null; throw error; });
         if (existing && (!existing.isDirectory() || (await readdir(target)).length)) throw new Error("unreceived selected mount holds existing contents; preserve and reconcile it: " + path);
         await execute("git", ["submodule", "init", "--", path], { cwd: repository, environment });

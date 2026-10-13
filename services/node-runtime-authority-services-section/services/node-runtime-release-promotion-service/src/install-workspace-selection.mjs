@@ -573,7 +573,7 @@ export async function installWorkspaceSelection({
         assert.equal((await git("rev-parse", "HEAD")).trim(), commit, "source revision changed during selection");
         for (const [name, bytes] of before) assert.deepEqual(await optionalBytes(join(root, name)), bytes, "source configuration changed: " + name);
         return { type: "NodeRuntimeLockedSourceSelection", version: 1, workspace: root, commit,
-          roots: requestedImporters, importerIds, sourceLockSha256: digest(before.get("pnpm-lock.yaml")),
+          roots: requestedImporters, importerIds, tooling, executable: pnpm, sourceLockSha256: digest(before.get("pnpm-lock.yaml")),
           sourceImporterCount: Object.keys(sourceLock.importers).length, sourceConfigurationUnchanged: true,
           elapsedMilliseconds: Date.now() - startedAt };
       }

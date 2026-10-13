@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 import { readFileSync, realpathSync } from "node:fs";
 import { resolve, relative, join, isAbsolute } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
-import { materializeSelectedSources, selectLockedWorkspaceClosure } from "../src/install-workspace-selection.mjs";
+import { materializeSelectedSources, selectLockedWorkspaceClosure, readWorkspaceSelectionLock } from "../src/install-workspace-selection.mjs";
 const args = process.argv.slice(2), flags = { importers: [] };
 for (let at = 0; at < args.length; at += 2) {
   if (!["--receipt", "--importer", "--source-lock"].includes(args[at]) || !args[at+1]) throw new TypeError("resolve-workspace-selection --receipt <installed receipt> [--importer <new project>...] [--source-lock <upstream lock>]");
@@ -14,9 +15,17 @@ for (let at = 0; at < args.length; at += 2) {
   else flags.receipt = args[at+1];
 }
 const previous = JSON.parse(readFileSync(flags.receipt, "utf8"));
-if (previous.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || previous.status !== "installed" || previous.sourceConfigurationUnchanged !== true) throw new TypeError("an installed unchanged selection is required");
+const planned = previous.type === "NodeRuntimeLockedSourceSelection";
+if ((!planned && (previous.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || previous.status !== "installed")) || previous.sourceConfigurationUnchanged !== true) throw new TypeError("an unchanged installed selection or locked source plan is required");
 const root = realpathSync(previous.workspace);
 let ids = [...new Set([...previous.importerIds, ...flags.importers])].sort();
+if (planned) {
+  const commit=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
+  if(commit!==previous.commit||createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex')!==previous.sourceLockSha256)throw new Error('locked source plan differs from its exact committed input');
+  const locked=await readWorkspaceSelectionLock({workspace:root,tooling:previous.tooling});
+  ids=selectLockedWorkspaceClosure({lockfile:locked,importerIds:ids,workspace:root});
+  await materializeSelectedSources({root,importerIds:ids,environment:process.env,onOutput:text=>process.stderr.write(text)});
+}
 if (flags.sourceLock !== undefined) {
   const require = createRequire(resolve(previous.tooling, "package.json"));
   const { readWantedLockfile } = await import(pathToFileURL(require.resolve("@pnpm/lockfile.fs")).href);

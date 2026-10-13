@@ -227,7 +227,7 @@ async function detachDeploymentLinks(directory) {
 }
 
 /** Reuse the frozen installation's scope for its actual generation or packing command. */
-export async function runWorkspaceSelection({ receipt, arguments: args, deployOutput, environment = process.env, onOutput } = {}) {
+export async function runWorkspaceSelection({ receipt, arguments: args, deployOutput, deployImporter, environment = process.env, onOutput } = {}) {
   if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
       || receipt.status !== "installed" || receipt.sourceConfigurationUnchanged !== true) {
     throw new TypeError("an installed, unchanged workspace selection is required");
@@ -239,16 +239,24 @@ export async function runWorkspaceSelection({ receipt, arguments: args, deployOu
     throw new TypeError("a consumer command cannot replace the selected source or lock scope");
   }
   const root = await verifyWorkspaceSelection(receipt, { environment });
-  let output;
+  let output, owner;
   if (deployOutput !== undefined) {
+    if (typeof deployImporter !== "string" || !receipt.importerIds.includes(deployImporter))
+      throw new TypeError("deploy output needs its explicit selected importer");
     if (typeof deployOutput !== "string" || !deployOutput) throw new TypeError("deploy output needs its explicit path");
     output = resolve(deployOutput);
     if (contained(root, output) || await realpath(dirname(output)) !== dirname(output)) throw new Error("deploy output must have a canonical parent outside source");
-    const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
-    assert.deepEqual(args, ["--filter", manifest.name, "--config.ignore-scripts=true", "--config.inject-workspace-packages=true", "deploy", "--prod", output], "produced output requires the exact selected deploy invocation");
+    owner = JSON.parse(await readFile(join(root, deployImporter, "package.json"), "utf8"));
+    if (typeof owner.name !== "string" || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u.test(owner.name))
+      throw new TypeError("deploy importer must declare its literal package name");
+    for (const id of receipt.importerIds) {
+      if (id !== deployImporter && JSON.parse(await readFile(join(root, id, "package.json"), "utf8")).name === owner.name)
+        throw new Error("deploy package has competing selected owners: " + owner.name);
+    }
+    assert.deepEqual(args, ["--filter", owner.name, "--config.ignore-scripts=true", "--config.inject-workspace-packages=true", "deploy", "--prod", output], "produced output requires the exact selected deploy invocation");
     try { await lstat(output); throw new Error("deploy output already exists"); } catch (error) { if (error.code !== "ENOENT") throw error; }
   }
-  const scope = receipt.importerIds.filter(id => id !== ".").map(id => "--workspace-packages=" + id);
+  const scope = receipt.importerIds.map(id => "--workspace-packages=" + id);
   // `run` does not expose install's --lockfile-dir CLI flag; the maintained
   // pnpm config namespace carries this same setting across both commands.
   const command = ["--config.lockfile-dir=" + receipt.artifact, ...scope, ...args];
@@ -269,7 +277,10 @@ export async function runWorkspaceSelection({ receipt, arguments: args, deployOu
       if (entry && !entry.isFile()) throw new Error("deploy metadata must be a regular nonredirected file: " + path);
       files.push({ path, sha256: entry ? digest(await readFile(file)) : null });
     }
-    produced = { directory: output, files };
+    const packed = JSON.parse(await readFile(join(output, "package.json"), "utf8"));
+    for (const field of ["name", "version", "exports", "bin", "files"])
+      assert.deepEqual(packed[field], owner[field], "deployed package differs from its selected owner: " + field);
+    produced = { directory: output, importerId: deployImporter, package: owner.name, files };
   }
   await verifyWorkspaceSelection(receipt, { environment });
   return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,
@@ -447,6 +458,49 @@ export function projectSelectedWorkspaceLock({ lockfile, importerIds, workspace,
   };
 }
 
+/** Derive only workspace-star demand from actual manifests and existing canonical lock links.
+ * Registry resolution, version selection and whole-lock acceptance remain pnpm-owned. */
+export function deriveWorkspaceOnlyImporter({lockfile, importerId, manifest, providers}) {
+  if (String(lockfile?.lockfileVersion) !== "9.0" || !lockfile.importers || !Array.isArray(providers))
+    throw new TypeError("workspace-only demand requires a pnpm9 lock and source providers");
+  const canonical = path => typeof path === "string" && path && !isAbsolute(path) && !/[\\\0]/u.test(path)
+    && (path === "." || path.split("/").every(part => part && part !== "." && part !== ".."));
+  if (!canonical(importerId) || typeof manifest?.name !== "string") throw new TypeError("canonical importer and manifest required");
+  const importer = {dependencies:undefined, devDependencies:undefined, optionalDependencies:undefined, specifiers:{}}, used = [];
+  for (const field of fields) for (const [name, specifier] of Object.entries(manifest[field] ?? {})) {
+    if (field !== "dependencies" && name in (manifest.dependencies ?? {})) continue;
+    if (specifier !== "workspace:*") throw new TypeError("workspace-only derivation cannot resolve registry or version demand: " + name);
+    const matches = providers.filter(provider => provider.manifest?.name === name);
+    if (matches.length !== 1 || !canonical(matches[0].path) || !lockfile.importers[matches[0].path])
+      throw new Error("workspace demand needs one already-locked source owner: " + name);
+    const provider = matches[0], links = new Set();
+    for (const [path, row] of Object.entries(lockfile.importers)) for (const entries of fields.map(key => row[key] ?? {})) {
+      const entry = entries[name];
+      if (typeof entry === "string" && entry.startsWith("link:"))
+        links.add(portable(relative("/", resolve("/", path, entry.slice(5)))) || ".");
+    }
+    if (links.size !== 1 || !links.has(provider.path)) throw new Error("workspace demand has absent or competing lock owners: " + name);
+    importer.specifiers[name] = specifier;
+    (importer[field] ??= {})[name] = "link:" + (portable(relative(importerId, provider.path)) || ".");
+    used.push({name, path:provider.path});
+  }
+  return {lockfile:{...lockfile, importers:{...lockfile.importers, [importerId]:importer}}, importerId, providers:used,
+    registryResolved:false, frozenReceived:false};
+}
+
+/** Read source lock data through the existing exact, frozen pnpm codec toolchain. */
+export async function readWorkspaceSelectionLock({workspace, tooling}) {
+  const root=await realpath(workspace), tools=await realpath(tooling);
+  if(root!==resolve(workspace)||tools!==resolve(tooling))throw new Error("lock reader source or tooling is redirected");
+  for(const file of ["package.json","pnpm-lock.yaml"])await regularSourceFile(tools,file);
+  assert.deepEqual(await readFile(join(tools,"package.json")),await readFile(join(toolchainSource,"manifest.json")),"lock reader tooling manifest differs");
+  assert.deepEqual(await readFile(join(tools,"pnpm-lock.yaml")),await readFile(join(toolchainSource,"pnpm-lock.yaml")),"lock reader tooling lock differs");
+  await regularSourceFile(root,"pnpm-lock.yaml");
+  const require=createRequire(join(tools,"package.json"));
+  const {readWantedLockfile}=await import(pathToFileURL(require.resolve("@pnpm/lockfile.fs")).href);
+  return readWantedLockfile(root,{ignoreIncompatible:false});
+}
+
 /**
  * Install a pnpm-selected source closure in a real checkout.
  * pnpm owns project discovery, graph traversal, lockfile codecs, materialization and policy checks.
@@ -536,7 +590,7 @@ export async function installWorkspaceSelection({
     // Even already-materialized and selector-based installs record the same
     // committed mount custody which later build/pack commands must re-receive.
     if (!materializeSources) sourceMounts = await receiveSelectedSources({ root, importerIds, environment });
-    const workspaceArgs = importerIds.filter((id) => id !== ".").map((id) => "--workspace-packages=" + id);
+    const workspaceArgs = importerIds.map((id) => "--workspace-packages=" + id);
     const scopedProjects = JSON.parse(await runPnpm([...workspaceArgs, "list", "--recursive", "--depth=-1", "--json"]));
     assert.deepEqual(scopedProjects.map(({ path }) => portable(relative(root, path)) || ".").sort(), importerIds, "explicit pnpm workspace scope differs from selection");
     const manifestHashes = {};

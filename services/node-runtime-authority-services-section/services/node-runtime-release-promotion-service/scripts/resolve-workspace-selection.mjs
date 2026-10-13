@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
-import { materializeSelectedSources, selectLockedWorkspaceClosure, readWorkspaceSelectionLock } from "../src/install-workspace-selection.mjs";
+import { receiveSelectedSources, selectLockedWorkspaceClosure, readWorkspaceSelectionLock } from "../src/install-workspace-selection.mjs";
 const args = process.argv.slice(2), flags = { importers: [] };
 for (let at = 0; at < args.length; at += 2) {
   if (!["--receipt", "--importer", "--source-lock"].includes(args[at]) || !args[at+1]) throw new TypeError("resolve-workspace-selection --receipt <installed receipt> [--importer <new project>...] [--source-lock <upstream lock>]");
@@ -24,7 +24,7 @@ if (planned) {
   if(commit!==previous.commit||createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex')!==previous.sourceLockSha256)throw new Error('locked source plan differs from its exact committed input');
   const locked=await readWorkspaceSelectionLock({workspace:root,tooling:previous.tooling});
   ids=selectLockedWorkspaceClosure({lockfile:locked,importerIds:ids,workspace:root});
-  await materializeSelectedSources({root,importerIds:ids,environment:process.env,onOutput:text=>process.stderr.write(text)});
+  await receiveSelectedSources({root,importerIds:ids,materialize:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
 }
 if (flags.sourceLock !== undefined) {
   const require = createRequire(resolve(previous.tooling, "package.json"));
@@ -35,7 +35,7 @@ if (flags.sourceLock !== undefined) {
   // Read supplementary supplier paths, retaining the receiving composition's
   // existing links. pnpm resolves the actual manifests below; no joined lock is written.
   ids = selectLockedWorkspaceClosure({ lockfile: { ...supplied, importers: { ...supplied.importers, ...current.importers } }, importerIds: ids, workspace: root });
-  await materializeSelectedSources({ root, importerIds: ids, environment: process.env, onOutput: text => process.stderr.write(text) });
+  await receiveSelectedSources({ root, importerIds: ids, materialize: true, environment: process.env, onOutput: text => process.stderr.write(text) });
 }
 const names = new Set();
 for (const id of ids) {

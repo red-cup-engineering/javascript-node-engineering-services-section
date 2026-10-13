@@ -152,7 +152,7 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
   }
   for (const [directory, paths] of scopes) {
     const changes = await execute("git", ["-C", directory, "status", "--porcelain=v1",
-      "--untracked-files=no", "--ignore-submodules=none", "--", ...paths],
+      "--untracked-files=no", "--ignore-submodules=untracked", "--", ...paths],
     { environment: { ...environment, GIT_OPTIONAL_LOCKS: "0" } });
     if (changes.trim()) throw new Error("selected source has tracked changes; receive source or derived output before reuse:\n" + changes.trim());
   }

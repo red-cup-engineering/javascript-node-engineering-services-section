@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmod, copyFile, lstat, mkdir, readFile, readdir, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -202,31 +202,6 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
   return root;
 }
 
-/** Separate PNPM deployment bytes from writable supplier inodes before sealing. */
-async function detachDeploymentLinks(directory) {
-  let detached = 0;
-  const visit = async base => {
-    for (const entry of await readdir(base, { withFileTypes: true })) {
-      const file = join(base, entry.name);
-      if (entry.isSymbolicLink()) continue;
-      if (entry.isDirectory()) { await visit(file); continue; }
-      const before = await lstat(file);
-      if (!before.isFile() || before.nlink < 2) continue;
-      const temporary = file + ".detaching." + process.pid;
-      try {
-        await copyFile(file, temporary);
-        await chmod(temporary, before.mode & 0o777);
-        const after = await lstat(file);
-        if (after.ino !== before.ino || after.size !== before.size || after.mtimeMs !== before.mtimeMs) throw new Error("deployment supplier changed while sealing: " + file);
-        await rename(temporary, file);
-        detached++;
-      } finally { await rm(temporary, { force: true }); }
-    }
-  };
-  await visit(directory);
-  return detached;
-}
-
 /** Reuse the frozen installation's scope for its actual generation or packing command. */
 export async function runWorkspaceSelection({ receipt, arguments: args, deployOutput, deployImporter, environment = process.env, onOutput } = {}) {
   if (receipt?.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || receipt.version !== 1
@@ -265,10 +240,8 @@ export async function runWorkspaceSelection({ receipt, arguments: args, deployOu
   try { await execute(receipt.executable, command, { cwd: root, environment, onOutput }); }
   finally { await preserveSourceBinModes(bins); }
   let produced;
-  let detachedFiles;
   if (output !== undefined) {
     if (await realpath(output) !== output || !(await lstat(output)).isDirectory()) throw new Error("deploy output is redirected");
-    detachedFiles = await detachDeploymentLinks(output);
     const files = [];
     // These are PNPM deployFromSharedLockfile's documented root products, not
     // a caller-selected file inventory. Preserve optional-file absence too.
@@ -286,7 +259,7 @@ export async function runWorkspaceSelection({ receipt, arguments: args, deployOu
   await verifyWorkspaceSelection(receipt, { environment });
   return { type: "NodeRuntimeWorkspaceSelectionCommandReceipt", version: 1, commit: receipt.commit,
     executable: receipt.executable, arguments: args, sourceConfigurationUnchanged: true,
-    ...(produced ? { produced, detachedFiles, supplierInodesSeparated: true } : {}) };
+    ...(produced ? { produced } : {}) };
 }
 
 /** Match only the lock-selected importer directories in pnpm's own project filter.

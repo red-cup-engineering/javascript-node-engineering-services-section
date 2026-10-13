@@ -35,7 +35,6 @@ async function fixture(t,{extraCount=0}={}){
 
 const errorContainsBodies=error=>error.message.includes('derived fixture')||error.message.includes('changed fixture');
 for(const [label,mutate] of [
- ['untracked leaf file',async f=>{await writeFile(join(f.leaf,'untracked-output.mjs'),'derived fixture');}],
  ['tracked leaf body',async f=>{await writeFile(join(f.leaf,'index.mjs'),'changed fixture');}],
  ['tracked leaf executable mode',async f=>{await chmod(join(f.leaf,'index.mjs'),0o755);}],
 ])test(label+' has exact separate nested status evidence',async t=>{
@@ -49,8 +48,7 @@ for(const [label,mutate] of [
  assert.equal(rootState.mounts[0].recordedCommit,f.receipt.sourceMounts[0].revision);assert.equal(rootState.mounts[0].actualCommit,f.receipt.sourceMounts[0].revision);assert.equal(rootState.mounts[0].indexGitlink,'160000 '+f.receipt.sourceMounts[0].revision+' 0\tpackages/library\n');
  assert.equal(childState.mounts.find(row=>row.path==='packages/library/vendor/leaf').actualCommit,f.receipt.sourceMounts[1].revision);
  assert.ok(!errorContainsBodies(observed));
- if(label.startsWith('untracked')){assert.match(evidence[0].v1,/M packages\/library/);assert.match(evidence[0].v2,/S..U/);assert.equal(evidence[2].v1,'');}
- else{assert.match(evidence[0].v2,/S.M./);assert.match(evidence[2].v1,/M index.mjs/);}
+ assert.match(evidence[0].v2,/S.M./);assert.match(evidence[2].v1,/M index.mjs/);
 });
 
 test('refusal metadata is bounded and reports omitted records without contents',async t=>{
@@ -59,4 +57,34 @@ test('refusal metadata is bounded and reports omitted records without contents',
  await assert.rejects(verifyWorkspaceSelection(f.receipt),error=>{observed=error;return /selected source has tracked changes/.test(error.message);});
  const leaf=observed.sourceState.find(row=>row.scope==='packages/library/vendor/leaf');assert.equal(leaf.porcelainV2.length,24);assert.equal(leaf.omittedRecords,16);assert.ok(!observed.message.includes('private changed body'));
  assert.deepEqual(await Promise.all([f.root,f.child,f.leaf].map(directory=>readFile(join(directory,'.git/index')))),indexes);
+});
+
+async function untracked(t){const f=await fixture(t);await writeFile(join(f.leaf,'untracked-output.mjs'),'derived fixture');return f;}
+test('authenticated nested untracked state preserves tracked-source admission and index bytes',async t=>{
+ const f=await untracked(t);const indexes=await Promise.all([f.root,f.child,f.leaf].map(directory=>readFile(join(directory,'.git/index'))));
+ assert.match(git(f.root,'status','--porcelain=v2','--untracked-files=no','--ignore-submodules=none','--','.'),/S\.\.U/);
+ assert.equal(await verifyWorkspaceSelection(f.receipt),f.root);
+ assert.deepEqual(await Promise.all([f.root,f.child,f.leaf].map(directory=>readFile(join(directory,'.git/index')))),indexes);
+});
+for(const [label,mutate]of[
+ ['body',async f=>writeFile(join(f.leaf,'index.mjs'),'changed body')],
+ ['mode',async f=>chmod(join(f.leaf,'index.mjs'),0o755)],
+ ['staged body',async f=>{await writeFile(join(f.leaf,'index.mjs'),'changed body');git(f.leaf,'add','index.mjs');}],
+ ['rename',async f=>git(f.leaf,'mv','index.mjs','renamed.mjs')],
+ ['commit',async f=>{await writeFile(join(f.leaf,'index.mjs'),'new commit');commit(f.leaf);}],
+ ['index gitlink',async f=>git(f.child,'update-index','--cacheinfo','160000,'+'1'.repeat(40)+',vendor/leaf')],
+])test('untracked state cannot conceal tracked '+label+' drift',async t=>{
+ const f=await untracked(t);await mutate(f);await assert.rejects(verifyWorkspaceSelection(f.receipt));
+});
+test('unselected untracked gitlink cannot substitute for an authenticated selected mount',async t=>{
+ const f=await untracked(t);f.receipt.importerIds=['.'];f.receipt.manifestHashes={'.':f.receipt.manifestHashes['.']};f.receipt.sourceMounts=[];
+ await assert.rejects(verifyWorkspaceSelection(f.receipt),/selected source has tracked changes or nested submodule state/);
+});
+test('genuine command may retain untracked output but cannot return with changed tracked bytes',async t=>{
+ const f=await untracked(t),executable=join(f.receipt.artifact,'producer'),marker=join(f.receipt.artifact,'ran');
+ const program=body=>'#!'+process.execPath+'\n'+body;
+ await writeFile(executable,program('const fs=require("node:fs");fs.writeFileSync('+JSON.stringify(marker)+',"ran");fs.writeFileSync('+JSON.stringify(join(f.leaf,'more-output.mjs'))+',"untracked");'));await chmod(executable,0o755);f.receipt.executable=executable;
+ const result=await runWorkspaceSelection({receipt:f.receipt,arguments:['build']});assert.equal(result.sourceConfigurationUnchanged,true);assert.equal(await readFile(marker,'utf8'),'ran');assert.equal(result.produced,undefined,'ordinary command does not attest untracked payload');
+ await writeFile(executable,program('require("node:fs").writeFileSync('+JSON.stringify(join(f.leaf,'index.mjs'))+',"changed during command");'));
+ await assert.rejects(runWorkspaceSelection({receipt:f.receipt,arguments:['build']}),/selected source has tracked changes/);
 });

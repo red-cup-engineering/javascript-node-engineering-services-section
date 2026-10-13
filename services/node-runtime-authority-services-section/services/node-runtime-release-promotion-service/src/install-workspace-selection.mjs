@@ -458,6 +458,19 @@ export function deriveWorkspaceOnlyImporter({lockfile, importerId, manifest, pro
     registryResolved:false, frozenReceived:false};
 }
 
+/** Read source lock data through the existing exact, frozen pnpm codec toolchain. */
+export async function readWorkspaceSelectionLock({workspace, tooling}) {
+  const root=await realpath(workspace), tools=await realpath(tooling);
+  if(root!==resolve(workspace)||tools!==resolve(tooling))throw new Error("lock reader source or tooling is redirected");
+  for(const file of ["package.json","pnpm-lock.yaml"])await regularSourceFile(tools,file);
+  assert.deepEqual(await readFile(join(tools,"package.json")),await readFile(join(toolchainSource,"manifest.json")),"lock reader tooling manifest differs");
+  assert.deepEqual(await readFile(join(tools,"pnpm-lock.yaml")),await readFile(join(toolchainSource,"pnpm-lock.yaml")),"lock reader tooling lock differs");
+  await regularSourceFile(root,"pnpm-lock.yaml");
+  const require=createRequire(join(tools,"package.json"));
+  const {readWantedLockfile}=await import(pathToFileURL(require.resolve("@pnpm/lockfile.fs")).href);
+  return readWantedLockfile(root,{ignoreIncompatible:false});
+}
+
 /**
  * Install a pnpm-selected source closure in a real checkout.
  * pnpm owns project discovery, graph traversal, lockfile codecs, materialization and policy checks.

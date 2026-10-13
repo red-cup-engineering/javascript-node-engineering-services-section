@@ -222,7 +222,8 @@ export async function runWorkspaceSelection({ receipt, arguments: args, deployOu
     output = resolve(deployOutput);
     if (contained(root, output) || await realpath(dirname(output)) !== dirname(output)) throw new Error("deploy output must have a canonical parent outside source");
     owner = JSON.parse(await readFile(join(root, deployImporter, "package.json"), "utf8"));
-    if (typeof owner.name !== "string" || !owner.name) throw new TypeError("deploy importer must declare its package name");
+    if (typeof owner.name !== "string" || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u.test(owner.name))
+      throw new TypeError("deploy importer must declare its literal package name");
     for (const id of receipt.importerIds) {
       if (id !== deployImporter && JSON.parse(await readFile(join(root, id, "package.json"), "utf8")).name === owner.name)
         throw new Error("deploy package has competing selected owners: " + owner.name);

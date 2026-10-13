@@ -70,7 +70,7 @@ if (!entries.length) throw new TypeError("at least one runtime entrance is requi
 // Compile the actual source entrances and their static dependency bindings.
 // The bundled output is an in-memory compiler product, never a substitute for
 // the installed package layout that owns file URLs and runtime assets.
-await build({ entryPoints: [...new Set(entries)], bundle: true, write: false, outdir: "compiled-runtime", preserveSymlinks,
+const compiled = await build({ entryPoints: [...new Set(entries)], bundle: true, splitting: true, write: false, outdir: "compiled-runtime", preserveSymlinks,
   platform: "node", format: "esm", target: "node24", logLevel: "error",
   plugins: [{ name: "installed-third-party-boundaries", setup(builder) {
     builder.onResolve({ filter: /^(?:@[^/]+\/)?[^./][^:]*$/ }, async (args) => {
@@ -85,4 +85,5 @@ await build({ entryPoints: [...new Set(entries)], bundle: true, write: false, ou
   } }],
   external: ["*.node", "*.wasm"], loader: { ".sql": "text", ".txt": "text" } });
 process.stdout.write(JSON.stringify({ type: "NodeRuntimeSourceCompilation", version: 1, entries,
+  outputFiles: compiled.outputFiles.length, compiledBytes: compiled.outputFiles.reduce((total, file) => total + file.contents.length, 0),
   staticBindingsCompiled: true, applicationExecuted: false }) + "\n");

@@ -4,8 +4,7 @@ import {createRequire} from 'node:module';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {resolve,join,relative,isAbsolute,dirname} from 'node:path';
-import {verifyWorkspaceSelection} from './install-workspace-selection.mjs';
-import {workspaceSourceReader} from './read-workspace-source.mjs';
+import {readNodeWorkspace} from './read-workspace-source.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const within=(root,file)=>{const offset=relative(root,file);return !isAbsolute(offset)&&offset!=='..'&&!offset.startsWith('../');};
@@ -33,17 +32,16 @@ export function workspaceTypeScriptOutputContract({root,manifest,compiler:ts,rea
   return {configuration:file,parsed,outputs};
 }
 
-/** Emit the selected owners' existing direct TypeScript recipes and retain the
+/** Emit the workspace owners' existing direct TypeScript recipes and retain the
  * compiler's actual output events. No directory inventory is promoted as proof
  * of generation, and no application or package test runs here. */
-export async function generateWorkspaceTypeScript(selection){
-  const workspace=await verifyWorkspaceSelection(selection),providers=new Map();
-  for(const importer of selection.importerIds){
+export async function generateWorkspaceTypeScript(options){
+  const source=await readNodeWorkspace(options),{workspace,reader}=source,providers=new Map();
+  for(const importer of source.importerIds){
     const root=join(workspace,importer),bytes=await readFile(join(root,'package.json')),manifest=JSON.parse(bytes);
     const recipe=/^tsc -p (tsconfig(?:\.build)?\.json)$/u.exec(manifest.scripts?.['build:node']??manifest.scripts?.build??'');
     if(recipe)providers.set(manifest.name,{importer,root,manifest,bytes,configuration:recipe[1]});
   }
-  const reader=await workspaceSourceReader({workspace,commit:selection.commit,importerIds:selection.importerIds});
   for(const provider of providers.values()){
     const require=createRequire(join(provider.root,'package.json')),ts=require('typescript');
     const contract=workspaceTypeScriptOutputContract({root:provider.root,manifest:provider.manifest,compiler:ts,readSource:reader.source});
@@ -89,6 +87,7 @@ export async function generateWorkspaceTypeScript(selection){
     active.delete(name);done.add(name);
   }
   for(const name of providers.keys())await emit(name);
-  await reader.verify();await verifyWorkspaceSelection(selection);
-  return {type:'NodeRuntimeTypeScriptEmission',version:1,producer:{package:'@red-cup-engineering/node-runtime-release-promotion-service',path:'src/generate-workspace-typescript.mjs',sha256:sha(await readFile(fileURLToPath(import.meta.url)))},sourceCommit:selection.commit,sourceLockSha256:selection.sourceHashes['pnpm-lock.yaml'],scopedLockSha256:selection.scopedLockSha256,sourceConfigurationUnchanged:true,applicationExecuted:false,packages};
+  await reader.verify();
+  return {type:'NodeRuntimeTypeScriptEmission',version:1,producer:{package:'@red-cup-engineering/node-runtime-release-promotion-service',path:'src/generate-workspace-typescript.mjs',sha256:sha(await readFile(fileURLToPath(import.meta.url)))},sourceCommit:source.commit,sourceLockSha256:sha(reader.bytes(join(workspace,'pnpm-lock.yaml'))),sourceConfigurationUnchanged:true,applicationExecuted:false,packages};
 }
+

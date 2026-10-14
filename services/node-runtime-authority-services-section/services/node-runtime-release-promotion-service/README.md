@@ -163,6 +163,20 @@ same delivery retains the same commit and candidate name; independent receiving
 still judges it against current source. Candidate identity is not semantic proof
 or deployed-operation evidence.
 
+## Required native product realization
+
+The owner specification [Required runtime products](content/text/documents/specifications/required-runtime-products.md)
+proposes for source integration the required evolution of the native aggregate: one consumer-rooted
+source/product plan, explicit owned inputs and complete outputs, dependency-first
+realization and exact supplier-instance identity. It allocates source projection,
+declaration resolution, planning and emission to the existing components.
+
+The implemented three-field module and build-script-derived TypeScript routes
+below are the current transition interface. Production adoption of the new
+contract requires the actual owner declarations, compiler inputs and caller to
+migrate together and pass the specification's receiving stages. The specification
+does not claim that an optional planner or an abstract test already replaced them.
+
 ## Source interface assessment
 
 `assess-node-runtime-source --workspace ROOT` assesses the exact committed

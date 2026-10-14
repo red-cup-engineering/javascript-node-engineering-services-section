@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync, realpathSync, existsSync, lstatSync } from "node:fs";
 import { resolve, relative, join, isAbsolute, matchesGlob } from "node:path";
-import { spawn, execFileSync } from "node:child_process";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
@@ -113,7 +113,7 @@ if (acquiring) {
   };
   for(;;){
     const selected=ids.map(id=>({id,manifest:readOwnedManifest(id)})),names=new Set(selected.map(row=>row.manifest?.name)),missing=new Map(),additions=new Set();
-    if(selected.some(row=>!row.manifest))throw new Error('selected provider manifest has no received source');
+    if(selected.some(row=>!row.manifest))throw new Error('selected provider manifests have no current source: '+JSON.stringify(selected.filter(row=>!row.manifest).map(row=>row.id)));
     for(const {id,manifest}of selected){
       if(expectedNames.has(id)&&manifest.name!==expectedNames.get(id))throw new Error('historical locator does not receive the demanded provider: '+id);
       for(const field of ['dependencies','devDependencies','optionalDependencies'])for(const[name,version]of Object.entries(manifest[field]??{})){
@@ -123,7 +123,7 @@ if (acquiring) {
         if(version.startsWith('workspace:')&&!names.has(name)){
           if(!missing.has(name))missing.set(name,new Set());
           const path=locate(id,locators[id]?.[field]?.[name]);
-          if(path)missing.get(name).add(path);
+          if(path&&readOwnedManifest(path)?.name===name)missing.get(name).add(path);
         }
       }
     }
@@ -131,9 +131,33 @@ if (acquiring) {
       // A newly declared edge can still have a known locator elsewhere in the
       // old lock. Otherwise inspect only already received committed owners.
       if(!paths.size)for(const[id,importer]of Object.entries(locators))for(const field of ['dependencies','devDependencies','optionalDependencies']){
-        const path=locate(id,importer[field]?.[name]);if(path)paths.add(path);
+        const path=locate(id,importer[field]?.[name]);if(path&&readOwnedManifest(path)?.name===name)paths.add(path);
       }
-      if(!paths.size){receiveCandidateManifests();for(const[id,manifest]of manifestCache)if(!ids.includes(id)&&manifest.name===name)paths.add(id);}
+      if(!paths.size){
+        for(;;){
+          receiveCandidateManifests();
+          for(const[id,manifest]of manifestCache)if(!ids.includes(id)&&manifest.name===name)paths.add(id);
+          if(paths.size)break;
+          const received=new Set(mounts.map(source=>source.path)),candidates=[];
+          // A package can move into a new recorded child repository. The old
+          // lock is a hint; only the current child manifest establishes its
+          // name. Receive metadata through the existing bounded Git owner,
+          // without hydrating unrelated package or corpus bodies.
+          for(const source of [{path:'.',revision:previous.commit},...mounts]){
+            const repository=source.path==='.'?root:resolve(root,source.path);
+            const declaration=execFileSync('git',['-C',repository,'ls-tree',source.revision,'--','.gitmodules'],{encoding:'utf8'}).trim();
+            if(!declaration)continue;
+            const result=spawnSync('git',['-C',repository,'config','--blob',source.revision+':.gitmodules','--get-regexp','[.]path$'],{encoding:'utf8'});
+            if(result.error||![0,1].includes(result.status))throw result.error??new Error('current Gitlink metadata was not received');
+            for(const line of result.stdout.trim().split('\n').filter(Boolean)){
+              const local=line.replace(/^\S+\s+/u,''),path=source.path==='.'?local:source.path+'/'+local;
+              if(workspaceOwner(path)&&!received.has(path))candidates.push(path);
+            }
+          }
+          if(!candidates.length)break;
+          mounts=await receiveSelectedSources({root,importerIds:[...new Set([...ids,...mounts.map(source=>source.path),...candidates])],materialize:true,metadataOnly:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
+        }
+      }
       if(paths.size!==1)throw new Error('current workspace demand needs one source locator for '+name+': '+paths.size);
       const [path]=paths;if(expectedNames.has(path)&&expectedNames.get(path)!==name)throw new Error('source locator has competing package identities');
       expectedNames.set(path,name);additions.add(path);

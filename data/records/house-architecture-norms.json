@@ -21,7 +21,7 @@
     },
     {
       "id": "no-external-dependencies",
-      "statement": "An import is a Node builtin, a relative path, or a house scope -- never a third-party package; a house scope owns a capability instead of merely passing an external one through.",
+      "statement": "An import is a Node builtin, a relative path, or a house scope by default; a house scope owns a capability instead of merely passing an external one through. A pinned external compiler may be used only in a declared build stage under a reviewed capability-specific decision that binds its installed artifact, authored inputs and owned products, and proves the compiler absent from the consumer's deployed executable closure. Runtime third-party imports remain prohibited by default; observed audit findings remain visible. The receiving procedure and individual admissions are owned by content/text/documents/specifications/build-toolchain-and-deployment-inputs.md.",
       "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-node-services-section/scripts/audit-external-imports.mjs#auditExternalImports",
       "kind": "external-import"
     },
@@ -63,9 +63,12 @@
     },
     {
       "id": "house-dependencies-declared-and-used",
-      "statement": "A house-scoped package imported under a package's own src/scripts is declared in its `dependencies`, and every house-scoped `dependencies` entry is actually imported somewhere in the package; the manifest's stated dependency closure and the code's real one match in both directions.",
+      "statement": "A house-scoped package imported under a package's own src/scripts is declared in its dependencies, and every house-scoped dependency is actually used. For an explicitly identified deployment-root package, an activated public entrance named by an exact selected host, instance, profile or machine declaration is also a use, provided the declaration's source identity, role-specific loading and actual packed supplier closure are received under content/text/documents/specifications/build-toolchain-and-deployment-inputs.md. Dummy imports and unselected or inactive declarations do not excuse an ordinary unused dependency.",
       "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-normalization-services-section/scripts/review-jsnode-package.mjs",
-      "kind": ["house-dependency-undeclared", "house-dependency-unused"]
+      "kind": [
+        "house-dependency-undeclared",
+        "house-dependency-unused"
+      ]
     },
     {
       "id": "one-implementation-per-capability",

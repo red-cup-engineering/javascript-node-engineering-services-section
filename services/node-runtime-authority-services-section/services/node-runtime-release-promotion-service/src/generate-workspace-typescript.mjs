@@ -35,16 +35,17 @@ export function workspaceTypeScriptOutputContract({root,manifest,compiler:ts,rea
 /** Emit the workspace owners' existing direct TypeScript recipes and retain the
  * compiler's actual output events. No directory inventory is promoted as proof
  * of generation, and no application or package test runs here. */
-export async function generateWorkspaceTypeScript(options){
-  const source=await readNodeWorkspace(options),{workspace,reader}=source,providers=new Map();
+export async function prepareWorkspaceTypeScriptGeneration(source){
+  const {workspace,reader}=source,providers=new Map();
   for(const importer of source.importerIds){
-    const root=join(workspace,importer),bytes=await readFile(join(root,'package.json')),manifest=JSON.parse(bytes);
+    const root=join(workspace,importer),bytes=reader.bytes(join(root,'package.json')),manifest=JSON.parse(bytes);
     const recipe=/^tsc -p (tsconfig(?:\.build)?\.json)$/u.exec(manifest.scripts?.['build:node']??manifest.scripts?.build??'');
     if(recipe)providers.set(manifest.name,{importer,root,manifest,bytes,configuration:recipe[1]});
   }
   for(const provider of providers.values()){
     const require=createRequire(join(provider.root,'package.json')),ts=require('typescript');
     const contract=workspaceTypeScriptOutputContract({root:provider.root,manifest:provider.manifest,compiler:ts,readSource:reader.source});
+    provider.contract=contract;
     provider.outputs=new Set(contract.outputs.map(({output})=>reader.uncommittedOutput(output)));
   }
   const active=new Set(),done=new Set(),packages=[];
@@ -52,7 +53,6 @@ export async function generateWorkspaceTypeScript(options){
     if(done.has(name))return;
     if(active.has(name))throw new Error('cyclic TypeScript producer dependency: '+name);
     const provider=providers.get(name);active.add(name);
-    for(const dependency of Object.keys(provider.manifest.dependencies??{}))if(providers.has(dependency))await emit(dependency);
     const {root,configuration}=provider,file=join(root,configuration);
     if(await realpath(file)!==file||!(await lstat(file)).isFile())throw new Error('TypeScript configuration is redirected');
     const configBytes=await readFile(file),require=createRequire(join(root,'package.json'));
@@ -86,8 +86,23 @@ export async function generateWorkspaceTypeScript(options){
     packages.push({name,version:provider.manifest.version,importer:provider.importer,manifestSha256:sha(provider.bytes),configuration:{path:configuration,sha256:sha(configBytes)},compiler:{name:compilerManifest.name,version:compilerManifest.version,manifestSha256:sha(compilerManifestBytes),entrySha256:sha(await readFile(compilerFile))},files:files.sort((a,b)=>a.path.localeCompare(b.path))});
     active.delete(name);done.add(name);
   }
-  for(const name of providers.keys())await emit(name);
-  await reader.verify();
-  return {type:'NodeRuntimeTypeScriptEmission',version:1,producer:{package:'@red-cup-engineering/node-runtime-release-promotion-service',path:'src/generate-workspace-typescript.mjs',sha256:sha(await readFile(fileURLToPath(import.meta.url)))},sourceCommit:source.commit,sourceLockSha256:sha(reader.bytes(join(workspace,'pnpm-lock.yaml'))),sourceConfigurationUnchanged:true,applicationExecuted:false,packages};
+  return {providers,emit,receipt:async()=>{
+    await reader.verify();
+    return {type:'NodeRuntimeTypeScriptEmission',version:1,producer:{package:'@red-cup-engineering/node-runtime-release-promotion-service',path:'src/generate-workspace-typescript.mjs',sha256:sha(await readFile(fileURLToPath(import.meta.url)))},sourceCommit:source.commit,sourceLockSha256:sha(reader.bytes(join(workspace,'pnpm-lock.yaml'))),sourceConfigurationUnchanged:true,applicationExecuted:false,importerIds:source.importerIds,...(source.filter===undefined?{}:{filter:source.filter}),packages};
+  }};
+}
+
+export async function generateWorkspaceTypeScript(options){
+  const prepared=await prepareWorkspaceTypeScriptGeneration(await readNodeWorkspace(options));
+  const active=new Set(),done=new Set();
+  async function emit(name){
+    if(done.has(name))return;
+    if(active.has(name))throw new Error('cyclic TypeScript producer dependency: '+name);
+    active.add(name);
+    for(const dependency of Object.keys(prepared.providers.get(name).manifest.dependencies??{}))if(prepared.providers.has(dependency))await emit(dependency);
+    await prepared.emit(name);active.delete(name);done.add(name);
+  }
+  for(const name of prepared.providers.keys())await emit(name);
+  return prepared.receipt();
 }
 

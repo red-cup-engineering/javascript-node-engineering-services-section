@@ -15,7 +15,8 @@
     "./source-delivery": "./src/source-delivery.mjs",
     "./compile-node-runtime": "./src/compile-node-runtime.mjs",
     "./generate-workspace-typescript": "./src/generate-workspace-typescript.mjs",
-    "./assess-source-interfaces": "./src/assess-source-interfaces.mjs"
+    "./assess-source-interfaces": "./src/assess-source-interfaces.mjs",
+    "./generate-workspace-artifacts": "./src/generate-workspace-artifacts.mjs"
   },
   "bin": {
     "promote-node-runtime-release": "./scripts/promote-node-runtime-release.mjs",
@@ -27,7 +28,8 @@
     "compile-node-runtime": "./scripts/compile-node-runtime.mjs",
     "generate-workspace-typescript": "./scripts/generate-workspace-typescript.mjs",
     "resolve-workspace-selection": "./scripts/resolve-workspace-selection.mjs",
-    "assess-node-runtime-source": "./scripts/assess-source-interfaces.mjs"
+    "assess-node-runtime-source": "./scripts/assess-source-interfaces.mjs",
+    "generate-workspace-artifacts": "./scripts/generate-workspace-artifacts.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"

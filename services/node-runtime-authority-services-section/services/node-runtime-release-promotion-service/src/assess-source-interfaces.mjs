@@ -51,6 +51,7 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
     const file = pending.pop();
     if (visited.has(file)) continue;
     visited.add(file);
+    if (generatedOwner(file)) { confine(file); unreceived.push({ file, reason: "interface-target-requires-native-generation-receiving" }); continue; }
     const content = source(file);
     if (!/\.[cm]?js$/u.test(file)) { unreceived.push({ file, reason: "non-JavaScript-interface-requires-native-receiver" }); continue; }
     let demand;

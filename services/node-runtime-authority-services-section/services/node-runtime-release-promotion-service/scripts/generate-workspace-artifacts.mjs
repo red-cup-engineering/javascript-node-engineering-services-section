@@ -1,6 +1,9 @@
 #!/usr/bin/env node
-import {readFile} from 'node:fs/promises';
 import {generateWorkspaceArtifacts} from '../src/generate-workspace-artifacts.mjs';
-const [receipt,...rest]=process.argv.slice(2);
-if(!receipt||rest.length)throw new TypeError('usage: generate-workspace-artifacts <installed selection receipt>');
-process.stdout.write(JSON.stringify(await generateWorkspaceArtifacts(JSON.parse(await readFile(receipt,'utf8'))))+'\n');
+const options={},args=process.argv.slice(2);
+for(let index=0;index<args.length;index+=2){
+  if(!['--workspace','--pnpm'].includes(args[index])||!args[index+1])throw new TypeError('usage: generate-workspace-artifacts --workspace <source root> [--pnpm <executable>]');
+  options[args[index].slice(2)]=args[index+1];
+}
+if(!options.workspace)throw new TypeError('workspace root is required');
+process.stdout.write(JSON.stringify(await generateWorkspaceArtifacts(options))+'\n');

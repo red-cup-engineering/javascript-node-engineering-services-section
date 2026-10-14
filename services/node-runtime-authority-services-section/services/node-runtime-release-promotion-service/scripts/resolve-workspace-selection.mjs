@@ -156,12 +156,23 @@ for (const id of ids) {
   if (names.has(manifest.name)) throw new TypeError("competing project name in the selected composition: " + manifest.name);
   names.add(manifest.name);
 }
+const competingRegistryEdges = [];
 for (const id of ids) {
   const manifest = JSON.parse(readFileSync(join(root,id,"package.json"), "utf8"));
   for (const field of ["dependencies", "devDependencies", "optionalDependencies"]) for (const [name, version] of Object.entries(manifest[field] ?? {})) {
     if (version.startsWith("workspace:") && !names.has(name)) throw new TypeError("selected composition lacks " + name + " required by " + manifest.name);
+    // One selected source supplier cannot also be hired from registry custody.
+    // Report the complete declared family before PNPM performs resolution;
+    // registry-only suppliers remain under PNPM's existing version policies.
+    if (names.has(name) && !version.startsWith("workspace:") && !version.startsWith("link:")) {
+      competingRegistryEdges.push({ importer: id, consumer: manifest.name, field, provider: name, specifier: version });
+    }
   }
 }
+if (competingRegistryEdges.length) throw Object.assign(
+  new Error("selected source suppliers also have registry dependency declarations: " + JSON.stringify(competingRegistryEdges)),
+  { code: "competing-supplier-custody", declarations: competingRegistryEdges },
+);
 // An unchanged installed demand already has a frozen pnpm receiving receipt.
 // Avoid mutable resolution, network discovery and a source write for that case.
 if(!planned&&flags.sourceLock===undefined&&flags.importers.every(id=>previous.importerIds.includes(id))

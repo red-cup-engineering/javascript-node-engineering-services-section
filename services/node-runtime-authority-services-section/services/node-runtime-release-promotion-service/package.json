@@ -24,7 +24,8 @@
     "reconcile-node-release": "./scripts/reconcile-node-release.mjs",
     "run-workspace-selection": "./scripts/run-workspace-selection.mjs",
     "compile-node-runtime": "./scripts/compile-node-runtime.mjs",
-    "generate-workspace-typescript": "./scripts/generate-workspace-typescript.mjs"
+    "generate-workspace-typescript": "./scripts/generate-workspace-typescript.mjs",
+    "resolve-workspace-selection": "./scripts/resolve-workspace-selection.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"

@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { receiveSelectedSources, selectLockedWorkspaceClosure, selectDeclaredWorkspaceClosure, readWorkspaceSelectionLock, verifyWorkspaceSelection, exactImporterFilterArgs } from "../src/install-workspace-selection.mjs";
+import { receiveSelectedSources, selectDeclaredWorkspaceClosure, readWorkspaceSelectionLock, verifyWorkspaceSelection, exactImporterFilterArgs } from "../src/install-workspace-selection.mjs";
 const producerFile=fileURLToPath(import.meta.url),producerRoot=execFileSync('git',['-C',dirname(producerFile),'rev-parse','--show-toplevel'],{encoding:'utf8'}).trim();
 const producerCommit=execFileSync('git',['-C',producerRoot,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),producerPath=relative(producerRoot,producerFile);
 const producerBytes=readFileSync(producerFile),committedProducer=execFileSync('git',['-C',producerRoot,'show',producerCommit+':'+producerPath]);
@@ -22,16 +22,24 @@ const previous = JSON.parse(readFileSync(flags.receipt, "utf8"));
 const planned = previous.type === "NodeRuntimeLockedSourceSelection";
 if ((!planned && (previous.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || previous.status !== "installed")) || previous.sourceConfigurationUnchanged !== true) throw new TypeError("an unchanged installed selection or locked source plan is required");
 const root = planned ? realpathSync(previous.workspace) : await verifyWorkspaceSelection(previous);
-let ids = [...new Set([...previous.importerIds, ...flags.importers])].sort();
-if (planned) {
+const acquiring=planned||flags.sourceLock!==undefined||flags.importers.some(id=>!previous.importerIds.includes(id));
+let ids = [...new Set(['.',...(acquiring?(previous.roots??previous.importerIds):previous.importerIds), ...flags.importers])].sort();
+if (acquiring) {
   const commit=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
-  if(commit!==previous.commit||createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex')!==previous.sourceLockSha256)throw new Error('locked source plan differs from its exact committed input');
+  if(commit!==previous.commit||createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex')!==(previous.sourceLockSha256??previous.sourceHashes['pnpm-lock.yaml']))throw new Error('source resolution differs from its exact committed input');
   const locked=await readWorkspaceSelectionLock({workspace:root,tooling:previous.tooling});
-  // An authored provider may have no historical importer yet. Follow existing
-  // locked edges, and keep new demand for exact-source manifest receiving below.
-  const lockedClosure=inputs=>[...new Set([...selectLockedWorkspaceClosure({lockfile:locked,
-    importerIds:inputs.filter(id=>Object.hasOwn(locked.importers,id)),workspace:root}),...inputs])].sort();
-  ids=lockedClosure(ids);
+  let locators=locked.importers;
+  if(flags.sourceLock!==undefined){
+    if(resolve(flags.sourceLock)!==join(dirname(resolve(flags.sourceLock)),'pnpm-lock.yaml'))throw new TypeError('upstream source lock must name its actual pnpm-lock.yaml carrier');
+    const require=createRequire(resolve(previous.tooling,'package.json'));
+    const {readWantedLockfile}=await import(pathToFileURL(require.resolve('@pnpm/lockfile.fs')).href);
+    const supplied=await readWantedLockfile(dirname(resolve(flags.sourceLock)),{ignoreIncompatible:false});
+    if(String(supplied.lockfileVersion)!==String(locked.lockfileVersion))throw new TypeError('upstream and receiving locks use different codecs');
+    // Supplementary paths are locator evidence only. No joined lock is written.
+    locators={...supplied.importers,...locked.importers};
+  }
+  // The historical lock locates a demanded supplier; it never admits that
+  // supplier's historical dependency graph. Read current source before descent.
   let mounts=await receiveSelectedSources({root,importerIds:ids,materialize:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
   // Current authored manifests govern demand; the old lock is resolution input.
   // New package owners are discovered from the committed source objects in
@@ -45,7 +53,7 @@ if (planned) {
   const workspaceOwner=id=>id==='.'||(workspacePatterns.some(pattern=>!pattern.startsWith('!')&&matchesGlob(id,pattern))
     &&!workspacePatterns.some(pattern=>pattern.startsWith('!')&&matchesGlob(id,pattern.slice(1))));
   const committedCandidates=()=>{
-    const found=new Set(Object.keys(locked.importers).filter(workspaceOwner));
+    const found=new Set(Object.keys(locators).filter(workspaceOwner));
     for(const source of [{path:'.',revision:previous.commit},...mounts]){
       const repository=source.path==='.'?root:resolve(root,source.path);
       const files=execFileSync('git',['-c','core.hooksPath=/dev/null','-C',repository,'ls-tree','-r','-z','--name-only',source.revision],{encoding:'utf8',maxBuffer:32*1024*1024,stdio:['ignore','pipe','pipe']});
@@ -70,34 +78,48 @@ if (planned) {
     if(existsSync(file)&&!readFileSync(file).equals(committed))throw new Error('provider manifest differs from exact received source: '+id);
     return JSON.parse(committed);
   };
+  const locate=(id,ref)=>{
+    if(typeof ref!=='string'||!ref.startsWith('link:'))return undefined;
+    const target=resolve(root,id,ref.slice(5)),offset=relative(root,target);
+    if(isAbsolute(offset)||offset==='..'||offset.startsWith('../'))throw new Error('provider locator leaves source root');
+    const path=offset.split('\\').join('/')||'.';
+    if(!workspaceOwner(path))throw new Error('provider locator is outside authored workspace');
+    return path;
+  };
+  const expectedNames=new Map();
   for(;;){
-    const selected=ids.map(id=>({id,manifest:readOwnedManifest(id)})),names=new Set(selected.map(row=>row.manifest?.name)),missing=new Set();
+    const selected=ids.map(id=>({id,manifest:readOwnedManifest(id)})),names=new Set(selected.map(row=>row.manifest?.name)),missing=new Map(),additions=new Set();
     if(selected.some(row=>!row.manifest))throw new Error('selected provider manifest has no received source');
-    for(const {manifest}of selected)for(const field of ['dependencies','devDependencies','optionalDependencies'])for(const[name,version]of Object.entries(manifest[field]??{}))if(version.startsWith('workspace:')&&!names.has(name))missing.add(name);
-    if(!missing.size)break;
-    const candidates=new Map([...missing].map(name=>[name,[]]));
-    for(const id of committedCandidates()){if(ids.includes(id))continue;const manifest=readOwnedManifest(id);if(candidates.has(manifest?.name))candidates.get(manifest.name).push(id);}
-    const additions=[];
-    for(const[name,paths]of candidates){if(paths.length!==1)throw new Error('current workspace demand needs one received provider for '+name+': '+paths.length);additions.push(paths[0]);}
-    ids=lockedClosure([...ids,...additions]);
+    for(const {id,manifest}of selected){
+      if(expectedNames.has(id)&&manifest.name!==expectedNames.get(id))throw new Error('historical locator does not receive the demanded provider: '+id);
+      for(const field of ['dependencies','devDependencies','optionalDependencies'])for(const[name,version]of Object.entries(manifest[field]??{})){
+        if(typeof version!=='string')throw new TypeError('invalid current declared dependency: '+name);
+        if(version.startsWith('file:'))throw new Error('selected source cannot relocate local file dependencies: '+name);
+        if(version.startsWith('link:')){const path=locate(id,version);if(!ids.includes(path))additions.add(path);}
+        if(version.startsWith('workspace:')&&!names.has(name)){
+          if(!missing.has(name))missing.set(name,new Set());
+          const path=locate(id,locators[id]?.[field]?.[name]);
+          if(path)missing.get(name).add(path);
+        }
+      }
+    }
+    for(const[name,paths]of missing){
+      // A newly declared edge can still have a known locator elsewhere in the
+      // old lock. Otherwise inspect only already received committed owners.
+      if(!paths.size)for(const[id,importer]of Object.entries(locators))for(const field of ['dependencies','devDependencies','optionalDependencies']){
+        const path=locate(id,importer[field]?.[name]);if(path)paths.add(path);
+      }
+      if(!paths.size)for(const id of committedCandidates()){if(ids.includes(id))continue;const manifest=readOwnedManifest(id);if(manifest?.name===name)paths.add(id);}
+      if(paths.size!==1)throw new Error('current workspace demand needs one source locator for '+name+': '+paths.size);
+      const [path]=paths;if(expectedNames.has(path)&&expectedNames.get(path)!==name)throw new Error('source locator has competing package identities');
+      expectedNames.set(path,name);additions.add(path);
+    }
+    if(!additions.size)break;
+    ids=[...new Set([...ids,...additions])].sort();
     mounts=await receiveSelectedSources({root,importerIds:ids,materialize:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
   }
 }
-if (flags.sourceLock !== undefined) {
-  if (resolve(flags.sourceLock) !== join(dirname(resolve(flags.sourceLock)), "pnpm-lock.yaml")) throw new TypeError("upstream source lock must name its actual pnpm-lock.yaml carrier");
-  const require = createRequire(resolve(previous.tooling, "package.json"));
-  const { readWantedLockfile } = await import(pathToFileURL(require.resolve("@pnpm/lockfile.fs")).href);
-  const supplied = await readWantedLockfile(dirname(resolve(flags.sourceLock)), { ignoreIncompatible: false });
-  const current = await readWantedLockfile(root, { ignoreIncompatible: false });
-  if (String(supplied.lockfileVersion) !== String(current.lockfileVersion)) throw new TypeError("upstream and receiving locks use different codecs");
-  // Read supplementary supplier paths, retaining the receiving composition's
-  // existing links. pnpm resolves the actual manifests below; no joined lock is written.
-  ids = selectLockedWorkspaceClosure({ lockfile: { ...supplied, importers: { ...supplied.importers, ...current.importers } }, importerIds: ids, workspace: root });
-  await receiveSelectedSources({ root, importerIds: ids, materialize: true, environment: process.env, onOutput: text => process.stderr.write(text) });
-}
-// Historical closure is acquisition evidence, not current demand. Recompute
-// the final selection from the explicitly requested roots and received source
-// manifests before PNPM resolution, so retired declarations cannot pin scope.
+// The final traversal receives the same current demand used for acquisition.
 const acquiredImporterCount=ids.length;
 ids=selectDeclaredWorkspaceClosure({workspace:root,
   importerIds:[...(previous.roots??previous.importerIds),...flags.importers],

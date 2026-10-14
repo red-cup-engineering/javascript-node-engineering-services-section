@@ -4,15 +4,19 @@ import assert from "node:assert/strict";
 import { verifyWorkspaceSelection } from "./install-workspace-selection.mjs";
 import { existsSync, globSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import { join, resolve, relative, isAbsolute } from "node:path";
+import { nodeJobProgramEntries } from "@red-cup-engineering/node-job-service";
 
 
 /** Compile source bindings without executing the application or replacing its installed layout. */
-export async function compileNodeRuntime({ entries: requestedEntries = [], selection, runtime: runtimePath, preserveSymlinks = false } = {}) {
+export async function compileNodeRuntime({ entries: requestedEntries = [], selection, runtime: runtimePath, jobDirectories = [], preserveSymlinks = false } = {}) {
   if (!Array.isArray(requestedEntries) || requestedEntries.some(entry => typeof entry !== "string" || !entry)) {
     throw new TypeError("explicit source entries must be nonempty paths");
   }
   const entries = [...requestedEntries];
   const runtime = runtimePath === undefined ? undefined : resolve(runtimePath);
+  if (!Array.isArray(jobDirectories) || jobDirectories.some(path => typeof path !== "string" || !path)) throw new TypeError("job directories must be nonempty paths");
+  if (jobDirectories.length && runtime === undefined) throw new TypeError("job programs must be compiled from their packed runtime");
+  for (const jobsDirectory of jobDirectories) entries.push(...nodeJobProgramEntries({ runtimeRoot: runtime, jobsDirectory }));
 if (runtime !== undefined && selection === undefined) throw new TypeError("a packed runtime requires its installed selection receipt");
 const failures = [];
 const selectedNames = new Set();
@@ -88,7 +92,7 @@ if (!entries.length) throw new TypeError("at least one runtime entrance is requi
 // Compile the actual source entrances and their static dependency bindings.
 // The bundled output is an in-memory compiler product, never a substitute for
 // the installed package layout that owns file URLs and runtime assets.
-await build({ entryPoints: [...new Set(entries)], bundle: true, write: false, outdir: "compiled-runtime", preserveSymlinks,
+await build({ entryPoints: [...new Set(entries)], bundle: true, splitting: true, write: false, outdir: "compiled-runtime", preserveSymlinks,
   platform: "node", format: "esm", target: "node24", logLevel: "error",
   plugins: [{ name: "installed-third-party-boundaries", setup(builder) {
     builder.onResolve({ filter: /^(?:@[^/]+\/)?[^./][^:]*$/ }, async (args) => {

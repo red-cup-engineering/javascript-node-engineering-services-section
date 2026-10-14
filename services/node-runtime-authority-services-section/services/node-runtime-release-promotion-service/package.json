@@ -13,7 +13,8 @@
     "./integrate": "./src/integrate.mjs",
     "./service": "./src/node-service.mjs",
     "./source-delivery": "./src/source-delivery.mjs",
-    "./compile-node-runtime": "./src/compile-node-runtime.mjs"
+    "./compile-node-runtime": "./src/compile-node-runtime.mjs",
+    "./generate-workspace-typescript": "./src/generate-workspace-typescript.mjs"
   },
   "bin": {
     "promote-node-runtime-release": "./scripts/promote-node-runtime-release.mjs",
@@ -29,7 +30,8 @@
   },
   "dependencies": {
     "esbuild": "0.28.1",
-    "@red-cup-engineering/computer-content-address-engineering-services-section": "workspace:*"
+    "@red-cup-engineering/computer-content-address-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/node-job-service": "workspace:*"
   },
   "engines": {
     "node": ">=22.18"

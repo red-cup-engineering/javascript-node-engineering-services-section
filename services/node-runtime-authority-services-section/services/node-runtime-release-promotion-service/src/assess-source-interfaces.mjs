@@ -23,6 +23,7 @@ const git = (root, ...args) => execFileSync("git", ["-C", root, ...args], { enco
  * guarantees of execution, resource consumption or scientific correctness.
  */
 export async function assessSourceInterfaces({ workspace, commit, importerIds, entries = [], environment = process.env } = {}) {
+  if (!Array.isArray(entries) || entries.some(entry => typeof entry !== "string" || !entry)) throw new TypeError("explicit source programmes require nonempty paths");
   const root = realpathSync(resolve(workspace));
   assert.equal(realpathSync(git(root, "rev-parse", "--show-toplevel")), root);
   assert.equal(git(root, "rev-parse", "HEAD^{commit}"), commit);

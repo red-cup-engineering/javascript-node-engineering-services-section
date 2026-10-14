@@ -623,7 +623,7 @@ export async function readWorkspaceSelectionLock({workspace, tooling}) {
  */
 export async function installWorkspaceSelection({
   workspace, expectedCommit, selector, importerIds: requestedImporters, materializeSources = false, planOnly = false, stateDirectory, pnpm = "pnpm", storeDirectory,
-  prepareOnly = false, environment = process.env, onOutput = (chunk) => process.stderr.write(chunk),
+  prepareOnly = false, sourceEntries = [], environment = process.env, onOutput = (chunk) => process.stderr.write(chunk),
 }) {
   if ((selector !== undefined) === (requestedImporters !== undefined)) throw new TypeError("choose a pnpm selector or explicit importer paths");
   if (selector !== undefined && (typeof selector !== "string" || !selector.trim() || selector.startsWith("-"))) throw new TypeError("one nonempty pnpm selector is required");
@@ -727,7 +727,7 @@ export async function installWorkspaceSelection({
     // installed. Unknown registry/TS interfaces remain explicit receiving work;
     // known missing owned bindings/carriers refuse before the expensive install.
     const { assessSourceInterfaces } = await import("./assess-source-interfaces.mjs");
-    const sourceAssessment = await assessSourceInterfaces({ workspace: root, commit, importerIds, environment });
+    const sourceAssessment = await assessSourceInterfaces({ workspace: root, commit, importerIds, entries: sourceEntries, environment });
     const sourceAssessmentPath = join(state, "source-interfaces-" + commit + ".json");
     await writeFile(sourceAssessmentPath, json(sourceAssessment));
     if (sourceAssessment.status === "refused") {

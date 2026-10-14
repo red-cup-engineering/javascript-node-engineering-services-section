@@ -1636,15 +1636,19 @@ function isReferencePosition(node, parent) {
 
 /**
  * Resolve every identifier reference in a program to the binding that
- * declares it. Returns `{ bindings, references, scopeOf }`: `bindings` lists
+ * declares it. Returns `{ bindings, declarationOccurrences, references, scopeOf }`: `bindings` lists
  * `{ name, kind, identifier, scope }` in declaration order; `references` maps
  * each referencing Identifier node to its binding, or to `null` for a global;
- * declaring identifiers map to their own binding. Modules are strict: `let`,
+ * declaring identifiers map to their own binding. `declarationOccurrences` lists
+ * `{ identifier, binding }` for every declaration occurrence, preserving a
+ * shared binding identity when legal var/function declarations repeat.
+ * Modules are strict: `let`,
  * `const`, `class` and function declarations are block-scoped, `var` hoists
  * to the nearest function.
  */
 export function bindJavaScript(program) {
   const bindings = [];
+  const declarationOccurrences = [];
   const references = new Map();
   const scopeOf = new Map();
   const newScope = (node, parent, isFunction) => {
@@ -1656,12 +1660,14 @@ export function bindJavaScript(program) {
     const existing = scope.names.get(identifier.name);
     if (existing && (kind === "var" || existing.kind === "var" || kind === "function")) {
       references.set(identifier, existing);
+      declarationOccurrences.push({ identifier, binding: existing });
       return existing;
     }
     const binding = { name: identifier.name, kind, identifier, scope };
     scope.names.set(identifier.name, binding);
     bindings.push(binding);
     references.set(identifier, binding);
+    declarationOccurrences.push({ identifier, binding });
     return binding;
   };
   const functionScopeOf = (scope) => { let current = scope; while (!current.isFunction) current = current.parent; return current; };
@@ -1746,5 +1752,5 @@ export function bindJavaScript(program) {
     for (const child of children(node)) resolvePass(child, node, inner);
   };
   resolvePass(program, null, scopeOf.get(program));
-  return { bindings, references, scopeOf };
+  return { bindings, declarationOccurrences, references, scopeOf };
 }

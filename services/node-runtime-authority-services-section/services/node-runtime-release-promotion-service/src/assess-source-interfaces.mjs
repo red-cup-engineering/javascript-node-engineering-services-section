@@ -113,7 +113,20 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
     if (seen.has(file)) return false;
     seen.add(file);
     if (!corpus.modules.has(file)) return true;
-    for (const node of corpus.modules.get(file).program.body) {
+    const body = corpus.modules.get(file).program.body;
+    const importedLocals = new Map(body.filter(node => node.type === "ImportDeclaration")
+      .flatMap(node => node.specifiers.map(specifier => [specifier.local.name, node.source.value])));
+    for (const node of body) {
+      // `import {X} from vendor; export {X}` is a re-export too. Without
+      // receiving the vendor, an unresolved declaration is unknown, not absent.
+      const locals = node.type === "ExportNamedDeclaration" && !node.source
+        ? node.specifiers.map(specifier => specifier.local.name)
+        : node.type === "ExportDefaultDeclaration" && node.declaration.type === "Identifier"
+          ? [node.declaration.name] : [];
+      for (const local of locals) if (importedLocals.has(local)) {
+        const target = edges.get(file + "\0" + importedLocals.get(local));
+        if (!target?.file || openReexport(target.file, seen)) return true;
+      }
       if (!["ExportAllDeclaration", "ExportNamedDeclaration"].includes(node.type) || !node.source) continue;
       const target = edges.get(file + "\0" + node.source.value);
       if (!target?.file || openReexport(target.file, seen)) return true;

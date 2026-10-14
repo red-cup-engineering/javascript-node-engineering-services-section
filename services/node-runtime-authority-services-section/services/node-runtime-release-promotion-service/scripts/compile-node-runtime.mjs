@@ -15,5 +15,10 @@ for (let index = 0; index < args.length; index += 2) {
   else if (args[index] === "--job-directory") jobDirectories.push(args[index + 1]);
   else runtime = resolve(args[index + 1]);
 }
-const receipt = await compileNodeRuntime({ entries, selection, runtime, jobDirectories, preserveSymlinks });
-process.stdout.write(JSON.stringify(receipt) + "\n");
+try {
+  const receipt = await compileNodeRuntime({ entries, selection, runtime, jobDirectories, preserveSymlinks });
+  process.stdout.write(JSON.stringify(receipt) + "\n");
+} catch (error) {
+  if (error.receipt) process.stdout.write(JSON.stringify(error.receipt) + "\n");
+  throw error;
+}

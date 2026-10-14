@@ -111,9 +111,13 @@ export function prepareSourceTreeDeliverySync({repository,sourceBase,proposalId,
  * coordinate exclusive writers of this checkout's named paths, index and HEAD
  * throughout prepare/receive. This is a Git custody operation, not an office or
  * effect authorization, and cannot make uncoordinated editors atomic. Child
- * gitlink working bodies are never visited or checked out. Refusal happens
- * before writes; an interrupted Git effect may leave named paths partly received
- * with HEAD unchanged, and the same request can preflight that state again.
+ * gitlink working bodies are never visited or checked out. Preflight checks
+ * precede mutation; interrupted effects or post-effect ref/readback refusals may
+ * leave named paths partly received with HEAD unchanged. A new preflight must
+ * receive the current public ref and named states before further effects.
+ * Explicit correspondence retains held source in the target's public ancestor
+ * history even when the approved target supersedes that file. The caller's
+ * source judgment owns that replacement; unpublished unique carriers refuse.
  */
 export function preparePublishedSourceReceivingSync({ repository, sourceBase, target, ref,
   remote = 'origin', coordinated = false, publicCorrespondence = {} }) {
@@ -193,7 +197,8 @@ export function preparePublishedSourceReceivingSync({ repository, sourceBase, ta
       const commit = oid(publicCorrespondence[path]);
       if (!isAncestorSync(repository, commit, target)) throw new TypeError('held source correspondence is not retained publicly: ' + path);
       correspondence = stateOfEntry(entryAtSync(repository, commit, path));
-      if (!same(correspondence, incoming)) throw new TypeError('public held source is not exactly received by target: ' + path);
+      if (!correspondence || !['100644', '100755', '120000', '160000'].includes(correspondence.mode))
+        throw new TypeError('public held source correspondence needs a supported carrier: ' + path);
     }
     const admitted = value => same(value, old) || same(value, incoming) || correspondence !== null && same(value, correspondence);
     if (!admitted(staged)) throw new TypeError('unique indexed source needs composition: ' + path);

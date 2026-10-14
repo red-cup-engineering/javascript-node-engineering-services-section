@@ -90,7 +90,9 @@ let compilation;
 try { compilation = await build({ metafile: true, entryPoints: [...new Set(entries)], bundle: true, splitting: true, write: false, outdir: "compiled-runtime", preserveSymlinks,
   platform: "node", format: "esm", target: "node24", logLevel: "error",
   plugins: [{ name: "installed-third-party-boundaries", setup(builder) {
-    builder.onLoad({ filter: /./u, namespace: "file" }, args => { inspectedModules.add(args.path); });
+    // esbuild transports filters to Go's regexp engine; JavaScript's `u` flag
+    // is not supported there. The Go dot already matches Unicode path runes.
+    builder.onLoad({ filter: /./, namespace: "file" }, args => { inspectedModules.add(args.path); });
     builder.onResolve({ filter: /^(?:@[^/]+\/)?[^./][^:]*$/ }, async (args) => {
       if (args.pluginData?.installedVendor === true) return;
       const packageName = args.path.startsWith("@") ? args.path.split("/").slice(0, 2).join("/") : args.path.split("/")[0];

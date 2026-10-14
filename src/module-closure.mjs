@@ -97,7 +97,13 @@ function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode,
   }
   if (specifier.startsWith(".") || specifier.startsWith("/")) {
     let file = resolve(dirname(from), specifier);
-    if (!existsSync(file)) return { external: `unresolved:${relative(packageOf(from).root, file)}` };
+    if (!existsSync(file)) {
+      // Source admission needs the exact target even before its native producer
+      // emits it. Installed execution keeps its ordinary unresolved refusal.
+      return sourcePackages === undefined
+        ? { external: `unresolved:${relative(packageOf(from).root, file)}` }
+        : { file };
+    }
     if (includeInstalled && statSync(file).isDirectory()) return { external: `import-directory:${specifier}` };
     return { file: statSync(file).isDirectory() ? join(file, "index.js") : file };
   }

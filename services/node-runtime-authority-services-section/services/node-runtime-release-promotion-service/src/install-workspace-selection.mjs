@@ -499,6 +499,13 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         if ((await objects()).some(row => row.endsWith(" blob") && !selectedBlobs.has(row.split(" ")[0]))) throw new Error("selected checkout received blobs outside its package projection; preserve the unreceived carrier");
       }
       assert.equal((await git(target, "rev-parse", "HEAD")).trim(), match[1], "selected mount source changed: " + path);
+      if (materialize) {
+        // Publish native submodule metadata after bounded acquisition. The
+        // committed-manifest reader uses Git's modules/name custody; a loose
+        // nested .git directory cannot be its final source normal form.
+        await git(repository, "submodule", "absorbgitdirs", "--", path);
+        assert.equal((await git(target, "rev-parse", "HEAD")).trim(), match[1], "metadata normalization changed selected source");
+      }
       if (materialize && !status.startsWith("-")) {
         const sparse = await git(target,"config","--bool","core.sparseCheckout").catch(error=>{
           if(error.exitCode===1)return "false";throw error;

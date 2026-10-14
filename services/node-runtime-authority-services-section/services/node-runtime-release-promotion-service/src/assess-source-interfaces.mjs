@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import ts from "typescript";
+import { workspaceTypeScriptOutputContract } from "./generate-workspace-typescript.mjs";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
@@ -59,7 +61,13 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
     const directory = resolve(root, id);
     return { root: directory, manifest: JSON.parse(source(join(directory, "package.json"))) };
   });
-  const generatedOwner = file => { const item = packages.filter(item => contained(item.root, file)).sort((a, b) => b.root.length - a.root.length)[0]; return item !== undefined && /^tsc -p (tsconfig(?:\.build)?\.json)$/u.test(item.manifest.scripts?.["build:node"] ?? item.manifest.scripts?.build ?? ""); };
+  const declaredOutputs = new Map();
+  for (const item of packages) {
+    const contract = workspaceTypeScriptOutputContract({ root: item.root, manifest: item.manifest, compiler: ts, readSource: source });
+    if (!contract) continue;
+    for (const output of contract.outputs) { source(output.input); declaredOutputs.set(output.output, { package: item.manifest.name, configuration: contract.configuration, input: output.input }); }
+  }
+  const generatedOwner = file => declaredOutputs.has(resolve(file));
   const resolveSource = javascriptSourceResolver(packages);
   const packageNames = new Set(packages.map(item => item.manifest.name));
   const pending = [...entries.map(file => resolve(root, file))], missing = [], unreceived = [], bindings = [], files = [], imports = new Map(), edges = new Map();
@@ -123,6 +131,6 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
   for (const file of [...sources.keys()]) source(file);
   return { type: "NodeRuntimeSourceInterfaceAssessment", version: 1, status: missing.length ? "refused" : "assessed", workspace: root, commit, importerIds,
     applicationExecuted: false, applicationInstalled: false, interfaceAdmissionComplete: !missing.length && !unreceived.length,
-    sourceMounts: mounts, sources: [...sources.values()], entries: [...new Set([...entries, ...packages.flatMap(item => declaredNodeRuntimeEntries(item.root, item.manifest).entries)])],
+    sourceMounts: mounts, generationContracts: [...declaredOutputs].map(([output, contract]) => ({ output, ...contract })), sources: [...sources.values()], entries: [...new Set([...entries, ...packages.flatMap(item => declaredNodeRuntimeEntries(item.root, item.manifest).entries)])],
     moduleGraph: [...edges].map(([key, target]) => { const [file, specifier] = key.split("\0"); return { file, specifier, target }; }), bindings, missing, unreceived };
 }

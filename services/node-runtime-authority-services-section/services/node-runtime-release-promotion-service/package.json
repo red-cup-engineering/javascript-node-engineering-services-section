@@ -35,7 +35,8 @@
     "@red-cup-engineering/computer-content-address-engineering-services-section": "workspace:*",
     "@red-cup-engineering/node-job-service": "workspace:*",
     "@red-cup-engineering/javascript-node-services-section": "workspace:*",
-    "@red-cup-engineering/javascript-computer": "workspace:*"
+    "@red-cup-engineering/javascript-computer": "workspace:*",
+    "typescript": "5.9.3"
   },
   "engines": {
     "node": ">=22.18"

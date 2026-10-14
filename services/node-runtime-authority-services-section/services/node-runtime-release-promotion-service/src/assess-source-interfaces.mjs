@@ -33,15 +33,23 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
     trees.set(owner.root, new Map(rows.map(row => { const [head, path] = row.split("\t"); const [mode, kind, identity] = head.split(" "); return [path, { mode, kind, identity }]; })));
   }
   const sources = new Map();
-  function source(file) {
+  function confine(file) {
     file = resolve(file);
     if (!contained(root, file)) throw new TypeError("source interface escapes selected checkout: " + file);
+    let current = root;
+    for (const part of relative(root, file).split(sep)) {
+      current = join(current, part);
+      try { if (lstatSync(current).isSymbolicLink()) throw new TypeError("source interface follows a link: " + current); }
+      catch (error) { if (error.code === "ENOENT") break; throw error; }
+    }
+    return file;
+  }
+  function source(file) {
+    file = confine(file);
     const owner = repositories.find(item => contained(item.root, file));
     const path = relative(owner.root, file).split(sep).join("/");
     const fact = trees.get(owner.root).get(path);
     if (!fact || fact.kind !== "blob" || !["100644", "100755"].includes(fact.mode)) throw new TypeError("interface is not a committed regular source: " + file);
-    let current = root;
-    for (const part of relative(root, file).split(sep)) { current = join(current, part); if (lstatSync(current).isSymbolicLink()) throw new TypeError("source interface follows a link: " + current); }
     const bytes = readFileSync(file);
     assert.equal(blob(bytes), fact.identity, "interface bytes differ from exact Git source: " + file);
     sources.set(file, { path: relative(root, file), sourceRepository: owner.path, sourceCommit: owner.revision, gitBlob: fact.identity, sha256: hash(bytes) });
@@ -57,6 +65,7 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
   const pending = [...entries.map(file => resolve(root, file))], missing = [], unreceived = [], bindings = [], files = [], imports = new Map(), edges = new Map();
   for (const item of packages) {
     const observed = declaredNodeRuntimeEntries(item.root, item.manifest);
+    for (const carrier of [...observed.entries, ...observed.missing.map(item => item.path)]) confine(carrier);
     pending.push(...observed.entries);
     for (const carrier of observed.missing) (generatedOwner(carrier.path) ? unreceived : missing).push({ package: item.manifest.name, ...carrier, reason: generatedOwner(carrier.path) ? "published-carrier-requires-native-generation" : "absent-published-carrier" });
   }
@@ -65,8 +74,8 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
     const file = pending.pop();
     if (visited.has(file)) continue;
     visited.add(file);
-    if (!/\.[cm]?js$/u.test(file)) { unreceived.push({ file, reason: "non-JavaScript-source-requires-native-generation" }); continue; }
     const content = source(file);
+    if (!/\.[cm]?js$/u.test(file)) { unreceived.push({ file, reason: "non-JavaScript-interface-requires-native-receiver" }); continue; }
     let demand;
     try { demand = readImports(content); }
     catch (error) { unreceived.push({ file, reason: "source-parser-refusal", message: error.message }); continue; }
@@ -74,6 +83,7 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
     for (const input of demand) {
       if (input.specifier === undefined) { unreceived.push({ file, reason: "computed-dynamic-interface" }); continue; }
       const target = resolveSource(input.specifier, file);
+      if (target?.file) confine(target.file);
       edges.set(file + "\0" + input.specifier, target);
       if (target?.file && existsSync(target.file)) pending.push(target.file);
       else if (target?.file) (generatedOwner(target.file) ? unreceived : missing).push({ file, specifier: input.specifier, target: target.file, reason: generatedOwner(target.file) ? "interface-target-requires-native-generation" : "absent-interface-target" });

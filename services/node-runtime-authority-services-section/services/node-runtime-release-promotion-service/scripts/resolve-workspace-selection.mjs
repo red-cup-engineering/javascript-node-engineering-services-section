@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { receiveSelectedSources, selectLockedWorkspaceClosure, readWorkspaceSelectionLock, verifyWorkspaceSelection, exactImporterFilterArgs } from "../src/install-workspace-selection.mjs";
+import { receiveSelectedSources, selectLockedWorkspaceClosure, selectDeclaredWorkspaceClosure, readWorkspaceSelectionLock, verifyWorkspaceSelection, exactImporterFilterArgs } from "../src/install-workspace-selection.mjs";
 const producerFile=fileURLToPath(import.meta.url),producerRoot=execFileSync('git',['-C',dirname(producerFile),'rev-parse','--show-toplevel'],{encoding:'utf8'}).trim();
 const producerCommit=execFileSync('git',['-C',producerRoot,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),producerPath=relative(producerRoot,producerFile);
 const producerBytes=readFileSync(producerFile),committedProducer=execFileSync('git',['-C',producerRoot,'show',producerCommit+':'+producerPath]);
@@ -95,6 +95,13 @@ if (flags.sourceLock !== undefined) {
   ids = selectLockedWorkspaceClosure({ lockfile: { ...supplied, importers: { ...supplied.importers, ...current.importers } }, importerIds: ids, workspace: root });
   await receiveSelectedSources({ root, importerIds: ids, materialize: true, environment: process.env, onOutput: text => process.stderr.write(text) });
 }
+// Historical closure is acquisition evidence, not current demand. Recompute
+// the final selection from the explicitly requested roots and received source
+// manifests before PNPM resolution, so retired declarations cannot pin scope.
+const acquiredImporterCount=ids.length;
+ids=selectDeclaredWorkspaceClosure({workspace:root,
+  importerIds:[...(previous.roots??previous.importerIds),...flags.importers],
+  projects:ids.map(id=>({id,manifest:JSON.parse(readFileSync(join(root,id,"package.json"),"utf8"))}))});
 const names = new Set();
 for (const id of ids) {
   const offset = relative(root, resolve(root, id));
@@ -111,9 +118,10 @@ for (const id of ids) {
 }
 // An unchanged installed demand already has a frozen pnpm receiving receipt.
 // Avoid mutable resolution, network discovery and a source write for that case.
-if(!planned&&flags.sourceLock===undefined&&flags.importers.every(id=>previous.importerIds.includes(id))){
+if(!planned&&flags.sourceLock===undefined&&flags.importers.every(id=>previous.importerIds.includes(id))
+  &&ids.length===previous.importerIds.length&&ids.every(id=>previous.importerIds.includes(id))){
   process.stdout.write(JSON.stringify({type:'NodeRuntimeWorkspaceSelectionResolution',version:1,workspace:root,
-    importerIds:ids,lockOwner:'pnpm',sourceConfigurationUnchanged:true,resolutionRequired:false,
+    importerIds:ids,acquiredImporterCount,lockOwner:'pnpm',sourceConfigurationUnchanged:true,resolutionRequired:false,
     applicationExecuted:false})+'\n');
   process.exit(0);
 }
@@ -124,6 +132,6 @@ child.stderr.on("data", chunk => process.stderr.write(chunk));
 const code = await new Promise((accept,reject) => {child.on("error",reject);child.on("exit",accept);});
 if (code !== 0) throw new Error("pnpm could not resolve the selected composition: " + code);
 if(!readFileSync(producerFile).equals(producerBytes))throw new Error('source resolver changed during resolution');
-process.stdout.write(JSON.stringify({type:"NodeRuntimeWorkspaceSelectionResolution",version:1,workspace:root,importerIds:ids,lockOwner:"pnpm",applicationExecuted:false,
+process.stdout.write(JSON.stringify({type:"NodeRuntimeWorkspaceSelectionResolution",version:1,workspace:root,importerIds:ids,acquiredImporterCount,lockOwner:"pnpm",applicationExecuted:false,
  inputCommit:previous.commit,inputSourceLockSha256:previous.sourceLockSha256??previous.sourceHashes['pnpm-lock.yaml'],resolvedSourceLockSha256:createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex'),
  producer:{repository:'red-cup-engineering/computer-code-engineering-services-section',commit:producerCommit,path:producerPath,sha256:createHash('sha256').update(producerBytes).digest('hex')}})+"\n");

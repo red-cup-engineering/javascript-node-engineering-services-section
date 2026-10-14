@@ -322,8 +322,7 @@ export function exactImporterFilterArgs(importerIds) {
 }
 
 /** Select source importers by following committed links, without discovering unrelated projects. */
-export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace }) {
-  if (String(lockfile?.lockfileVersion) !== "9.0") throw new Error("selected install requires a pnpm v9 lockfile");
+function selectWorkspacePaths({ importerIds, workspace, dependenciesOf }) {
   if (!Array.isArray(importerIds) || !importerIds.length) throw new TypeError("at least one importer path is required");
   const root = resolve(workspace), selected = new Set(), pending = [".", ...importerIds];
   while (pending.length) {
@@ -333,20 +332,81 @@ export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace 
     if (!contained(root, path)) throw new Error("importer escapes workspace: " + input);
     const id = portable(relative(root, path)) || ".";
     if (selected.has(id)) continue;
-    const importer = lockfile.importers?.[id];
-    if (!importer) throw new Error("selected importer is absent from the committed lock: " + id);
     selected.add(id);
+    for (const target of dependenciesOf(id)) pending.push(target);
+  }
+  return [...selected].sort();
+}
+
+/** Select source importers from the committed PNPM links, without deriving versions. */
+export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace }) {
+  if (String(lockfile?.lockfileVersion) !== "9.0") throw new Error("selected install requires a pnpm v9 lockfile");
+  const root = resolve(workspace);
+  return selectWorkspacePaths({importerIds,workspace,dependenciesOf(id) {
+    const importer = lockfile.importers?.[id], targets=[];
+    if (!importer) throw new Error("selected importer is absent from the committed lock: " + id);
     for (const field of fields) for (const [name, ref] of Object.entries(importer[field] ?? {})) {
       if (typeof ref !== "string") throw new TypeError("invalid locked dependency " + name + " from " + id);
       if (ref.startsWith("file:")) throw new Error("selected install cannot relocate local file dependencies: " + name);
       if (ref.startsWith("link:")) {
         const target = resolve(root, id, ref.slice(5));
         if (!contained(root, target)) throw new Error("workspace link escapes checkout: " + name + " from " + id);
-        pending.push(portable(relative(root, target)) || ".");
+        targets.push(portable(relative(root, target)) || ".");
       }
     }
+    return targets;
+  }});
+}
+
+/** Select current declared demand from already received manifests; PNPM still resolves versions. */
+export function selectDeclaredWorkspaceClosure({ projects, importerIds, workspace }) {
+  if(!Array.isArray(projects)||!projects.length)throw new TypeError("received workspace projects required");
+  const root=resolve(workspace),byId=new Map(),byName=new Map();
+  for(const {id,manifest} of projects) {
+    if(typeof id!=="string"||!id||isAbsolute(id)||id.includes("\0")||!contained(root,resolve(root,id))
+      ||portable(relative(root,resolve(root,id)))!==(id==="."?"":id)||typeof manifest?.name!=="string"||!manifest.name)
+      throw new TypeError("literal received project identity and manifest name required");
+    if(byId.has(id))throw new Error("duplicate received project: "+id);
+    byId.set(id,manifest);byName.set(manifest.name,[...(byName.get(manifest.name)??[]),id]);
   }
-  return [...selected].sort();
+  return selectWorkspacePaths({importerIds,workspace,dependenciesOf(id) {
+    const manifest=byId.get(id),targets=[];
+    if(!manifest)throw new Error("current demand has no received project: "+id);
+    for(const field of fields)for(const [name,version]of Object.entries(manifest[field]??{})) {
+      if(typeof version!=="string")throw new TypeError("invalid declared dependency "+name+" from "+id);
+      if(version.startsWith("file:"))throw new Error("selected install cannot relocate local file dependencies: "+name);
+      if(version.startsWith("link:"))targets.push(portable(relative(root,resolve(root,id,version.slice(5))))||".");
+      if(version.startsWith("workspace:")) {
+        const owners=byName.get(name)??[];
+        if(owners.length!==1)throw new Error("current workspace demand needs one received provider for "+name+": "+owners.length);
+        targets.push(owners[0]);
+      }
+    }
+    return targets;
+  }});
+}
+
+/** A package projection includes the recorded Git controls that govern its checkout. */
+function selectedSourceProjection(tree, selected) {
+  if (selected.some(id => /[\\\r\n\0]/u.test(id))) throw new Error("selected sparse path is not literal");
+  const literal = id => "/" + id.replace(/([*?\[\] ])/gu, "\\$1");
+  const patterns = selected.includes(".") ? ["/*"] : ["/.gitmodules", ...selected.map(id => literal(id) + "/")];
+  const blobs = new Set();
+  const policies = [];
+  for (const row of tree.split("\0").filter(Boolean)) {
+    const tab = row.indexOf("\t"), [mode, type, oid] = row.slice(0, tab).split(" "), file = row.slice(tab + 1);
+    const parent = portable(dirname(file));
+    const attributes = (file === ".gitattributes" || file.endsWith("/.gitattributes"))
+      && selected.some(id => id === "." || parent === "." || id === parent || id.startsWith(parent + "/"));
+    if (attributes) {
+      if (mode !== "100644" && mode !== "100755") throw new Error("selected checkout attributes are not regular recorded source: " + file);
+      patterns.push(literal(file));
+      policies.push({ path: file, gitBlob: oid });
+    }
+    if (mode === "160000" && selected.some(id => id === file || id.startsWith(file + "/"))) patterns.push(literal(file));
+    if (type === "blob" && (attributes || file === ".gitmodules" || selected.includes(".") || selected.some(id => file.startsWith(id + "/")))) blobs.add(oid);
+  }
+  return { patterns: [...new Set(patterns)], blobs, attributes: policies };
 }
 
 /** Receive recorded selected Gitlinks; acquisition is allowed only during requested installation. */
@@ -367,23 +427,14 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
     await git(root, "sparse-checkout", "add", "--skip-checks", "--", ...importerIds.filter(id => id !== "."), ...assets);
   }
   const mounts = [];
-  const attributePaths = paths => [...new Set(paths.flatMap(path => {
-    const parts=path==='.'?[]:path.split('/');
-    return Array.from({length:parts.length+1},(_,at)=>[...parts.slice(0,at),'.gitattributes'].join('/'));
-  }))];
   async function receiveAttributes(repository, paths) {
-    const facts=[];
-    for(const path of attributePaths(paths)){
-      const row=(await git(repository,'ls-tree','HEAD','--',path)).trim();
-      if(!row)continue;
-      const match=/^(100644|100755) blob ([a-f0-9]{40})\t(.+)$/u.exec(row);
-      if(!match||match[3]!==path)throw new Error('Git attributes must be a committed regular source carrier');
+    const { attributes } = selectedSourceProjection(await git(repository, 'ls-tree', '-r', '-z', 'HEAD'), paths);
+    for (const { path } of attributes) {
       const file=join(repository,path);
       await regularSourceFile(root,portable(relative(root,file)));
       assert.deepEqual(await readFile(file),Buffer.from(await git(repository,'show','HEAD:'+path)),'Git attributes differ from committed checkout policy');
-      facts.push({path,gitBlob:match[2]});
     }
-    return facts;
+    return attributes;
   }
   async function receive(repository, paths) {
     const hasModules = await git(repository, "ls-tree", "HEAD", "--", ".gitmodules");
@@ -413,10 +464,6 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         // checkout can hydrate unrelated corpus bodies; cone mode also includes
         // ordinary files in ancestor directories, so it is not sufficient here.
         const selected = wanted.map(id => id === path ? "." : id.slice(path.length + 1));
-        if (selected.some(id => /[\\\r\n\0]/u.test(id))) throw new Error("selected source path cannot be represented by a literal sparse projection");
-        const literal = id => "/" + id.replace(/([*?\[\] ])/gu, "\\$1");
-        const attributes = new Set(attributePaths(selected));
-        const patterns = selected.includes(".") ? ["/*"] : ["/.gitmodules", ...selected.map(id => literal(id) + "/")];
         const key = line.slice(0, line.search(/\s/u)).replace(/[.]path$/u, ".url");
         const url = (await git(repository, "config", "--blob", "HEAD:.gitmodules", "--get", key)).trim();
         if (!/^(?:https:\/\/github[.]com\/|git@github[.]com:|ssh:\/\/git@github[.]com\/)[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:[.]git)?$/u.test(url)) throw new Error("selected mount needs its committed GitHub source URL");
@@ -445,14 +492,7 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         // --filter is a request: some servers warn and send an unfiltered pack.
         // A refused partial acquisition is retained, never certified or erased.
         if ((await objects()).some(row => row.endsWith(" blob"))) throw new Error("selected source transport did not honor blob:none; preserve the unreceived carrier");
-        const selectedBlobs = new Set((await git(target, "ls-tree", "-r", "-z", match[1])).split("\0").filter(Boolean).flatMap(row => {
-          const tab = row.indexOf("\t"), [mode, type, oid] = row.slice(0, tab).split(" "), file = row.slice(tab + 1);
-          // A selected descendant needs its ancestor Gitlink placeholder, but
-          // never the ordinary files beside that mount.
-          if(type==="blob"&&attributes.has(file))patterns.push(literal(file));
-          if (mode === "160000" && selected.some(id => id === file || id.startsWith(file + "/"))) patterns.push(literal(file));
-          return type === "blob" && (file === ".gitmodules" || attributes.has(file) || selected.includes(".") || selected.some(id => file.startsWith(id + "/"))) ? [oid] : [];
-        }));
+        const { patterns, blobs: selectedBlobs } = selectedSourceProjection(await git(target, "ls-tree", "-r", "-z", match[1]), selected);
         await git(target, "sparse-checkout", "init", "--no-cone");
         await git(target, "sparse-checkout", "set", "--no-cone", "--", ...patterns);
         await execute("git", ["-c", "protocol.file.allow=never", "-c", "core.hooksPath=/dev/null", "checkout", "-q", "--detach", match[1]], { cwd: target, environment });
@@ -465,9 +505,7 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         });
         if(sparse.trim()==="true") {
           const selected=wanted.map(id=>id===path?".":id.slice(path.length+1));
-          if(selected.some(id=>/[\\\r\n\0]/u.test(id)))throw new Error("selected sparse path is not literal");
-          const literal=id=>"/"+id.replace(/([*?\[\] ])/gu,"\\$1");
-          const patterns=selected.includes(".")?["/*"]:["/.gitmodules",...selected.map(id=>literal(id)+"/")];
+          const { patterns } = selectedSourceProjection(await git(target, "ls-tree", "-r", "-z", match[1]), selected);
           // Extend this recorded source owner; never repin, reset or discard
           // already received paths when a later selection needs another face.
           await git(target,"sparse-checkout","add","--no-cone","--",...patterns);
@@ -475,14 +513,6 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         }
       }
       const localPaths=wanted.map(id=>id===path?'.':id.slice(path.length+1));
-      // Git consults ancestor attributes even outside the sparse package body.
-      // Recover only those exact committed metadata files after a refused old
-      // projection, without widening its ordinary source or changing its HEAD.
-      if(materialize&&(await git(target,'config','--bool','core.sparseCheckout').catch(()=>'' )).trim()==='true'){
-        const attrs=[];
-        for(const file of attributePaths(localPaths))if((await git(target,'ls-tree','HEAD','--',file)).trim())attrs.push('/'+file);
-        if(attrs.length)await git(target,'sparse-checkout','add','--no-cone','--',...attrs);
-      }
       const attributes=await receiveAttributes(target,localPaths);
       mounts.push({ path: portable(relative(root, target)), revision: match[1], ...(attributes.length?{attributes}:{}) });
       await receive(target, wanted.map((id) => id === path ? "." : id.slice(path.length + 1)));

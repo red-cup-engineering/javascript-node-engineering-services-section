@@ -9,6 +9,29 @@ import {verifyWorkspaceSelection} from './install-workspace-selection.mjs';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const within=(root,file)=>{const offset=relative(root,file);return !isAbsolute(offset)&&offset!=='..'&&!offset.startsWith('../');};
 
+/** Read the configured TypeScript output mapping without emitting a product.
+ * The source reader is supplied by custody admission for source assessment;
+ * ordinary generation uses the exact installed compiler's normal reader.
+ */
+export function workspaceTypeScriptOutputContract({root,manifest,compiler:ts,readSource=ts.sys.readFile}) {
+  const recipe=/^tsc -p (tsconfig(?:\.build)?\.json)$/u.exec(manifest.scripts?.['build:node']??manifest.scripts?.build??'');
+  if(!recipe)return null;
+  const file=join(root,recipe[1]),source=ts.readConfigFile(file,readSource);
+  if(source.error)throw new Error(ts.flattenDiagnosticMessageText(source.error.messageText,'\n'));
+  const parsed=ts.parseJsonConfigFileContent(source.config,{...ts.sys,readFile:readSource},root,{},file);
+  if(parsed.errors.length)throw new Error(ts.formatDiagnosticsWithColorAndContext(parsed.errors,{getCurrentDirectory:()=>root,getCanonicalFileName:file=>file,getNewLine:()=> '\n'}));
+  if(!parsed.options.outDir||!within(root,resolve(parsed.options.outDir)))throw new Error('TypeScript producer output must remain in its source owner');
+  const outputs=[];
+  for(const input of parsed.fileNames){
+    if(!within(root,resolve(input)))throw new Error('TypeScript input is outside its source owner');
+    for(const output of ts.getOutputFileNames(parsed,input,false)){
+      if(!within(root,resolve(output))||!within(resolve(parsed.options.outDir),resolve(output)))throw new Error('TypeScript declared output escapes its owner');
+      outputs.push({input:resolve(input),output:resolve(output)});
+    }
+  }
+  return {configuration:file,parsed,outputs};
+}
+
 /** Emit the selected owners' existing direct TypeScript recipes and retain the
  * compiler's actual output events. No directory inventory is promoted as proof
  * of generation, and no application or package test runs here. */
@@ -30,11 +53,7 @@ export async function generateWorkspaceTypeScript(selection){
     const configBytes=await readFile(file),require=createRequire(join(root,'package.json'));
     const compilerFile=require.resolve('typescript'),compilerManifestFile=require.resolve('typescript/package.json');
     const compilerManifestBytes=await readFile(compilerManifestFile),compilerManifest=JSON.parse(compilerManifestBytes),ts=require('typescript');
-    const source=ts.readConfigFile(file,ts.sys.readFile);
-    if(source.error)throw new Error(ts.flattenDiagnosticMessageText(source.error.messageText,'\n'));
-    const parsed=ts.parseJsonConfigFileContent(source.config,ts.sys,root,{},file);
-    if(parsed.errors.length)throw new Error(ts.formatDiagnosticsWithColorAndContext(parsed.errors,{getCurrentDirectory:()=>root,getCanonicalFileName:file=>file,getNewLine:()=> '\n'}));
-    if(!parsed.options.outDir||!within(root,resolve(parsed.options.outDir)))throw new Error('TypeScript producer output must remain in its source owner');
+    const {parsed}=workspaceTypeScriptOutputContract({root,manifest:provider.manifest,compiler:ts});
     for(const input of parsed.fileNames)if(!within(root,resolve(input))||await realpath(input)!==resolve(input))throw new Error('TypeScript input is outside its regular source owner');
     const program=ts.createProgram(parsed.fileNames,parsed.options),diagnostics=ts.getPreEmitDiagnostics(program);
     if(diagnostics.length)throw new Error(ts.formatDiagnosticsWithColorAndContext(diagnostics,{getCurrentDirectory:()=>root,getCanonicalFileName:file=>file,getNewLine:()=> '\n'}));

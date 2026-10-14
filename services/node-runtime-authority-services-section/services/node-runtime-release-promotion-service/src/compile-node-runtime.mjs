@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 import { build } from "esbuild";
+import { declaredNodeRuntimeEntries } from "./source-entrances.mjs";
+import { parseJavaScript } from "@red-cup-engineering/javascript-node-services-section/javascript-parser";
 import assert from "node:assert/strict";
 import { verifyWorkspaceSelection } from "./install-workspace-selection.mjs";
-import { existsSync, globSync, readFileSync, readdirSync, realpathSync } from "node:fs";
-import { join, resolve, relative, isAbsolute } from "node:path";
+import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { nodeJobProgramEntries } from "@red-cup-engineering/node-job-service";
 
 
@@ -22,30 +24,22 @@ const failures = [];
 const selectedNames = new Set();
 const inspectedPackages = [];
 const externalModules = new Set();
-function targets(value) {
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap(targets);
-  if (value === null || typeof value !== "object") return [];
-  const keys = Object.keys(value);
-  if (keys.some(key => key.startsWith("."))) return keys.flatMap(key => targets(value[key]));
-  // Node's ESM conditions use the first matching branch in declaration order.
-  const key = keys.find(key => ["node", "import", "default"].includes(key));
-  return key === undefined ? [] : targets(value[key]);
+const inspectedModules = new Set();
+const vendorReexports = [];
+const starExports = new Map();
+function isStarExport(importer, specifier) {
+  if (!importer || !/\.[cm]?js$/u.test(importer)) return false;
+  if (!starExports.has(importer)) {
+    const program = parseJavaScript(readFileSync(importer, "utf8"));
+    starExports.set(importer, new Set(program.body.filter(node => node.type === "ExportAllDeclaration").map(node => node.source.value)));
+  }
+  return starExports.get(importer).has(specifier);
 }
 function carrier(root, manifest) {
   inspectedPackages.push({ name: manifest.name, version: manifest.version, directory: root });
-  const paths = [...targets(manifest.exports), ...(typeof manifest.bin === "string" ? [manifest.bin] : Object.values(manifest.bin ?? {}))];
-  if (!manifest.exports && manifest.main) paths.push(manifest.main);
-  for (const path of new Set(paths)) {
-    const absolute = resolve(root, path), offset = relative(root, absolute);
-    if (isAbsolute(offset) || offset === ".." || offset.startsWith("../")) throw new TypeError("package carrier escapes its owner: " + manifest.name);
-    const files = path.includes("*") ? globSync(path, { cwd: root }).map(file => resolve(root, file)) : [absolute];
-    if (!files.length) failures.push(manifest.name + ": unmatched export " + path);
-    for (const file of files) {
-      if (!existsSync(file)) failures.push(manifest.name + ": absent carrier " + path);
-      else if (/\.(?:[cm]?js|tsx?)$/u.test(file) && !/\.d\.[cm]?ts$/u.test(file)) entries.push(file);
-    }
-  }
+  const observed = declaredNodeRuntimeEntries(root, manifest);
+  entries.push(...observed.entries);
+  failures.push(...observed.missing.map(item => manifest.name + ": " + item.reason + " " + item.declaration));
 }
 if (selection !== undefined) {
   await verifyWorkspaceSelection(selection);
@@ -92,25 +86,41 @@ if (!entries.length) throw new TypeError("at least one runtime entrance is requi
 // Compile the actual source entrances and their static dependency bindings.
 // The bundled output is an in-memory compiler product, never a substitute for
 // the installed package layout that owns file URLs and runtime assets.
-await build({ entryPoints: [...new Set(entries)], bundle: true, splitting: true, write: false, outdir: "compiled-runtime", preserveSymlinks,
+let compilation;
+try { compilation = await build({ metafile: true, entryPoints: [...new Set(entries)], bundle: true, splitting: true, write: false, outdir: "compiled-runtime", preserveSymlinks,
   platform: "node", format: "esm", target: "node24", logLevel: "error",
   plugins: [{ name: "installed-third-party-boundaries", setup(builder) {
+    builder.onLoad({ filter: /./u, namespace: "file" }, args => { inspectedModules.add(args.path); });
     builder.onResolve({ filter: /^(?:@[^/]+\/)?[^./][^:]*$/ }, async (args) => {
       if (args.pluginData?.installedVendor === true) return;
       const packageName = args.path.startsWith("@") ? args.path.split("/").slice(0, 2).join("/") : args.path.split("/")[0];
       if (selection === undefined || selectedNames.has(packageName)) return;
-      // These packages run in their installed Node layout. Inlining a vendor's
-      // generated bundle changes optional and native binding semantics.
+      // Ordinary vendor imports remain in their installed Node layout. A star
+      // re-export needs the genuine vendor declarations for static symbol
+      // projection. Only this in-memory compiler follows that source edge;
+      // no bundle is deployed and no application or native binding executes.
       const resolved = await builder.resolve(args.path, { resolveDir: args.resolveDir, kind: args.kind, pluginData: { installedVendor: true } });
       if (resolved.errors.length) return { errors: resolved.errors };
+      if (args.kind === "import-statement" && isStarExport(args.importer, args.path)) {
+        vendorReexports.push({ importer: args.importer, specifier: args.path, source: resolved.path });
+        return { ...resolved, pluginData: undefined };
+      }
       externalModules.add(args.path);
       return { path: args.path, external: true };
     });
   } }],
   external: ["*.node", "*.wasm"], loader: { ".sql": "text", ".txt": "text" } });
+} catch (error) {
+  error.receipt = { type: "NodeRuntimeSourceCompilation", version: 1, status: "refused",
+    staticBindingsCompiled: false, applicationExecuted: false, sourceCommit: selection?.commit,
+    entries, inspectedPackages, inspectedModules: [...inspectedModules].sort(), vendorReexports,
+    externalModules: [...externalModules].sort(), diagnostics: error.errors ?? [{ text: error.message }] };
+  throw error;
+}
 if (selection !== undefined) await verifyWorkspaceSelection(selection);
 const observed = new Set(inspectedPackages.map(({ name }) => name));
-return { type: "NodeRuntimeSourceCompilation", version: 1, entries,
+return { type: "NodeRuntimeSourceCompilation", version: 1, status: "compiled", entries,
+  inspectedModules: [...inspectedModules].sort(), vendorReexports, moduleGraph: compilation.metafile.inputs,
   staticBindingsCompiled: true, applicationExecuted: false,
   scope: runtime !== undefined ? "packed-selected-packages" : selection !== undefined ? "selected-source" : "explicit-entries",
   sourceCommit: selection?.commit, inspectedPackages,

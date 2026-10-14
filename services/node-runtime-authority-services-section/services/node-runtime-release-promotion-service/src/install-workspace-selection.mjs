@@ -186,14 +186,19 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
       actualCommit: (await execute("git", ["-C", join(root, mount.path), "rev-parse", "HEAD"], { environment: observationEnvironment })).trim() };
   };
   for (const [directory, paths] of scopes) {
+    // Selected mount HEADs and index Gitlinks were received above; each selected
+    // child's own tracked bodies has its separate scope below. Parent status
+    // must not recurse into unselected siblings, but staged source still binds.
+    const staged = await execute("git", ["-C", directory, "diff", "--cached", "--name-only",
+      "--ignore-submodules=none", "--", ...paths], { environment: observationEnvironment });
     const changes = await execute("git", ["-C", directory, "status", "--porcelain=v1",
-      "--untracked-files=no", "--ignore-submodules=untracked", "--", ...paths],
+      "--untracked-files=no", "--ignore-submodules=all", "--", ...paths],
     { environment: observationEnvironment });
-    if (!changes.trim()) continue;
+    if (!changes.trim() && !staged.trim()) continue;
     // Git excludes untracked payload here while preserving tracked changes and
     // changed gitlink heads. Keep bounded diagnostics for every actual refusal.
     const allRecords = (await execute("git", ["-C", directory, "status", "--porcelain=v2", "-z",
-      "--untracked-files=no", "--ignore-submodules=untracked", "--", ...paths],
+      "--untracked-files=no", "--ignore-submodules=all", "--", ...paths],
     { environment: observationEnvironment })).split("\0").filter(Boolean);
     if (sourceState.length === 8) { omittedScopes++; continue; }
     const records = allRecords.slice(0, 24);
@@ -203,6 +208,7 @@ export async function verifyWorkspaceSelection(receipt, { environment = process.
       return record.startsWith("1 ") && record.split(" ")[2]?.startsWith("S") && record.endsWith(" " + path);
     }));
     sourceState.push({ scope, porcelainV1: changes.slice(0, 4096), porcelainV1Truncated: changes.length > 4096,
+      stagedPaths: staged.slice(0, 4096), stagedPathsTruncated: staged.length > 4096,
       porcelainV2: records.map(record => record.slice(0, 1024)), omittedRecords: allRecords.length - records.length,
       longRecordsTruncated: records.some(record => record.length > 1024),
       mounts: await Promise.all(implicated.slice(0, 24).map(mountIdentity)), omittedMounts: Math.max(0, implicated.length - 24) });

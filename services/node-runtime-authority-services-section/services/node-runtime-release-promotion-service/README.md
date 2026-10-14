@@ -231,3 +231,17 @@ star re-exports. Ordinary vendor imports remain external, and the compiled
 output stays in memory. Both compilation success and refusal retain inspected
 modules; refusal receipts preserve diagnostics rather than losing the family
 scope. These receipts are source evidence, not a package or operating verdict.
+
+Source-product modules declare `nodeRuntimeGeneration` with exactly `module`,
+`export` and `outputs` in their owning package. `generateWorkspaceArtifacts`
+first receives the existing TypeScript products, then calls those declared
+exports with the exact selected `sourceRoot`, a Git-authenticated UTF-8 `read`
+operation and the actual publication instant. The module returns precisely its
+owned `{path,text}` products; the native writer alone records and writes their
+bytes. Undeclared/duplicate outputs and self-output reads refuse. Input records
+retain their original source commit, blob and digest. Shell recipes, optional
+examples, application execution and a generated-directory census are excluded.
+Pre-install assessment reads the same declaration and authenticates the producer
+module; only its exact declared paths qualify as future module products. Guix
+receives the combined native emission and independently matches module, inputs,
+output set and packed byte digests against the selected source.

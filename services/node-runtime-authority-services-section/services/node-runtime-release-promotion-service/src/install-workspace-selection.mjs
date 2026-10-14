@@ -748,6 +748,27 @@ export async function installWorkspaceSelection({
     // Even already-materialized and selector-based installs record the same
     // committed mount custody which later build/pack commands must re-receive.
     if (!materializeSources) sourceMounts = await receiveSelectedSources({ root, importerIds, environment });
+    // A historical locator closure is not current dependency admission. Refuse
+    // known declaration drift before installing; PNPM still owns resolution,
+    // peers, integrity and its complete frozen-lock verification.
+    const declarationChanges = [];
+    for (const id of importerIds) {
+      const manifest = JSON.parse(await readFile(join(root, id, "package.json"), "utf8"));
+      const declared = { ...manifest.devDependencies, ...manifest.dependencies, ...manifest.optionalDependencies };
+      const locked = sourceLock.importers[id]?.specifiers ?? {};
+      const peers = manifest.peerDependencies ?? {};
+      for (const name of new Set([...Object.keys(declared), ...Object.keys(locked)])) {
+        if (!(name in declared) && name in peers) continue;
+        if (declared[name] !== locked[name]) declarationChanges.push({ importer: id, name,
+          ...(declared[name] === undefined ? {} : { declared: declared[name] }),
+          ...(locked[name] === undefined ? {} : { locked: locked[name] }) });
+      }
+    }
+    if (declarationChanges.length) {
+      const error = new Error("current source declarations require PNPM resolution before frozen installation: " + JSON.stringify(declarationChanges.slice(0, 20)));
+      error.declarationChanges = declarationChanges;
+      throw error;
+    }
     // Assess exact current source interfaces before application dependencies are
     // installed. Unknown registry/TS interfaces remain explicit receiving work;
     // known missing owned bindings/carriers refuse before the expensive install.

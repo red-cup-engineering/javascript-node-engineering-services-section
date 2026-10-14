@@ -5,6 +5,7 @@ import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import { gitHistoryPlan, readBatchBlobs } from "@red-cup-engineering/git-services-section/git-command-codec";
 import { pathToFileURL, fileURLToPath } from "node:url";
 import { receiveSelectedSources, selectDeclaredWorkspaceClosure, readWorkspaceSelectionLock, verifyWorkspaceSelection, exactImporterFilterArgs } from "../src/install-workspace-selection.mjs";
 const producerFile=fileURLToPath(import.meta.url),producerRoot=execFileSync('git',['-C',dirname(producerFile),'rev-parse','--show-toplevel'],{encoding:'utf8'}).trim();
@@ -52,18 +53,6 @@ if (acquiring) {
   if(!Array.isArray(workspacePatterns)||workspacePatterns.some(pattern=>typeof pattern!=='string'))throw new Error('source workspace must declare package patterns');
   const workspaceOwner=id=>id==='.'||(workspacePatterns.some(pattern=>!pattern.startsWith('!')&&matchesGlob(id,pattern))
     &&!workspacePatterns.some(pattern=>pattern.startsWith('!')&&matchesGlob(id,pattern.slice(1))));
-  const committedCandidates=()=>{
-    const found=new Set(Object.keys(locators).filter(workspaceOwner));
-    for(const source of [{path:'.',revision:previous.commit},...mounts]){
-      const repository=source.path==='.'?root:resolve(root,source.path);
-      const files=execFileSync('git',['-c','core.hooksPath=/dev/null','-C',repository,'ls-tree','-r','-z','--name-only',source.revision],{encoding:'utf8',maxBuffer:32*1024*1024,stdio:['ignore','pipe','pipe']});
-      for(const file of files.split('\0').filter(file=>file==='package.json'||file.endsWith('/package.json'))){
-        const id=relative(root,resolve(repository,dirname(file))).split('\\').join('/')||'.';
-        if(workspaceOwner(id))found.add(id);
-      }
-    }
-    return [...found].sort();
-  };
   const readOwnedManifest=(id)=>{
     const file=resolve(root,id,'package.json');
     const offset=relative(root,file);if(isAbsolute(offset)||offset==='..'||offset.startsWith('../')||typeof id!=='string'||id.includes('\0'))throw new Error('provider metadata leaves the selected source root');
@@ -87,6 +76,35 @@ if (acquiring) {
     return path;
   };
   const expectedNames=new Map();
+  const manifestCache=new Map();
+  const receiveCandidateManifests=()=>{
+    for(const source of [{path:'.',revision:previous.commit},...mounts]){
+      const repository=source.path==='.'?root:resolve(root,source.path);
+      const tree=execFileSync('git',['-c','core.hooksPath=/dev/null','-C',repository,'ls-tree','-r','-z',source.revision],{encoding:'utf8',maxBuffer:32*1024*1024});
+      const rows=[];
+      for(const row of tree.split('\0').filter(Boolean)){
+        const tab=row.indexOf('\t'),[mode,type,oid]=row.slice(0,tab).split(' '),path=row.slice(tab+1);
+        if(path!=='package.json'&&!path.endsWith('/package.json'))continue;
+        const id=relative(root,resolve(repository,dirname(path))).split('\\').join('/')||'.';
+        const owner=[{path:'.',revision:previous.commit},...mounts].filter(m=>m.path==='.'||id===m.path||id.startsWith(m.path+'/')).sort((a,b)=>b.path.length-a.path.length)[0];
+        if(!workspaceOwner(id)||owner.path!==source.path||manifestCache.has(id))continue;
+        if(type!=='blob'||!['100644','100755'].includes(mode))throw new Error('provider metadata must be a committed regular file: '+id);
+        rows.push({id,path,oid});
+      }
+      if(!rows.length)continue;
+      const execute=plan=>execFileSync(plan.command,['-C',repository,...plan.arguments],{input:plan.input??undefined,env:{...process.env,...plan.environment},maxBuffer:32*1024*1024});
+      const local=new Set(execute(gitHistoryPlan.localObjects()).toString('utf8').trim().split('\n'));
+      const missing=[...new Set(rows.map(row=>row.oid).filter(oid=>!local.has(oid)))];
+      for(let offset=0;offset<missing.length;offset+=4096)execute(gitHistoryPlan.prefetchBlobs(missing.slice(offset,offset+4096)));
+      const objects=rows.map(row=>row.oid),bodies=readBatchBlobs(objects,execute(gitHistoryPlan.blobs(objects)));
+      for(let index=0;index<rows.length;index++){
+        const {id,path}=rows[index],text=bodies[index],file=resolve(repository,path);
+        if(text===undefined)throw new Error('committed provider metadata was not received: '+id);
+        if(existsSync(file)&&(!lstatSync(file).isFile()||realpathSync(file)!==file||!readFileSync(file).equals(Buffer.from(text))))throw new Error('provider manifest differs or redirects committed source: '+id);
+        manifestCache.set(id,JSON.parse(text));
+      }
+    }
+  };
   for(;;){
     const selected=ids.map(id=>({id,manifest:readOwnedManifest(id)})),names=new Set(selected.map(row=>row.manifest?.name)),missing=new Map(),additions=new Set();
     if(selected.some(row=>!row.manifest))throw new Error('selected provider manifest has no received source');
@@ -109,7 +127,7 @@ if (acquiring) {
       if(!paths.size)for(const[id,importer]of Object.entries(locators))for(const field of ['dependencies','devDependencies','optionalDependencies']){
         const path=locate(id,importer[field]?.[name]);if(path)paths.add(path);
       }
-      if(!paths.size)for(const id of committedCandidates()){if(ids.includes(id))continue;const manifest=readOwnedManifest(id);if(manifest?.name===name)paths.add(id);}
+      if(!paths.size){receiveCandidateManifests();for(const[id,manifest]of manifestCache)if(!ids.includes(id)&&manifest.name===name)paths.add(id);}
       if(paths.size!==1)throw new Error('current workspace demand needs one source locator for '+name+': '+paths.size);
       const [path]=paths;if(expectedNames.has(path)&&expectedNames.get(path)!==name)throw new Error('source locator has competing package identities');
       expectedNames.set(path,name);additions.add(path);

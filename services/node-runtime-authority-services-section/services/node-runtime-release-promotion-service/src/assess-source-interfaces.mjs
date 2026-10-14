@@ -83,6 +83,10 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
     const file = pending.pop();
     if (visited.has(file)) continue;
     visited.add(file);
+    confine(file);
+    // An old output's presence does not turn a compiler product into authored
+    // source. Its exact config/input mapping remains an obligation to generate.
+    if (generatedOwner(file)) { unreceived.push({ file, reason: "published-carrier-requires-native-generation" }); continue; }
     const content = source(file);
     if (!/\.[cm]?js$/u.test(file)) { unreceived.push({ file, reason: "non-JavaScript-interface-requires-native-receiver" }); continue; }
     let demand;
@@ -94,7 +98,8 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
       const target = resolveSource(input.specifier, file);
       if (target?.file) confine(target.file);
       edges.set(file + "\0" + input.specifier, target);
-      if (target?.file && existsSync(target.file)) pending.push(target.file);
+      if (target?.file && generatedOwner(target.file)) unreceived.push({ file, specifier: input.specifier, target: target.file, reason: "interface-target-requires-native-generation" });
+      else if (target?.file && existsSync(target.file)) pending.push(target.file);
       else if (target?.file) (generatedOwner(target.file) ? unreceived : missing).push({ file, specifier: input.specifier, target: target.file, reason: generatedOwner(target.file) ? "interface-target-requires-native-generation" : "absent-interface-target" });
       else if (target?.external) {
         const name = input.specifier.startsWith("@") ? input.specifier.split("/").slice(0, 2).join("/") : input.specifier.split("/")[0];
@@ -117,7 +122,7 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
   }
   for (const [file, demand] of imports) for (const input of demand) {
     const target = edges.get(file + "\0" + input.specifier);
-    if (!target?.file || !existsSync(target.file) || !["named", "default"].includes(input.mode)) continue;
+    if (!target?.file || generatedOwner(target.file) || !existsSync(target.file) || !["named", "default"].includes(input.mode)) continue;
     const declarations = corpus.exportedDeclarations(target.file, input.name);
     if (!declarations.length) {
       const finding = { file, ...input, target: target.file };

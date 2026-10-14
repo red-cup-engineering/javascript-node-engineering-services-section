@@ -33,13 +33,23 @@ export async function workspaceSourceReader({workspace,commit,importerIds,enviro
     }
     return file;
   }
-  function bytes(file){
+  function object(file){
     file=confine(file);
     const owner=repositories.find(item=>contained(item.root,file)),path=relative(owner.root,file).split(sep).join('/'),fact=trees.get(owner.root).get(path);
+    return fact?{path:relative(root,file).split(sep).join('/'),sourceRepository:owner.path,sourceCommit:owner.revision,sourcePath:path,...fact}:null;
+  }
+  function uncommittedOutput(file){
+    const fact=object(file);
+    if(fact)throw new TypeError('source emission would overwrite a committed object: '+JSON.stringify(fact));
+    return confine(file);
+  }
+  function bytes(file){
+    file=confine(file);
+    const fact=object(file);
     if(!fact||fact.kind!=='blob'||!['100644','100755'].includes(fact.mode))throw new TypeError('interface is not a committed regular source: '+file);
     const body=readFileSync(file);
     assert.equal(blob(body),fact.identity,'interface bytes differ from exact Git source: '+file);
-    sources.set(file,{path:relative(root,file).split(sep).join('/'),sourceRepository:owner.path,sourceCommit:owner.revision,gitBlob:fact.identity,sha256:hash(body)});
+    sources.set(file,{path:relative(root,file).split(sep).join('/'),sourceRepository:fact.sourceRepository,sourceCommit:fact.sourceCommit,gitBlob:fact.identity,sha256:hash(body)});
     return body;
   }
   const source=file=>new TextDecoder('utf-8',{fatal:true}).decode(bytes(file));
@@ -48,5 +58,5 @@ export async function workspaceSourceReader({workspace,commit,importerIds,enviro
     assert.equal(git(root,'rev-parse','HEAD^{commit}'),commit);
     for(const file of [...sources.keys()])bytes(file);
   }
-  return {root,mounts,sources,confine,bytes,source,verify};
+  return {root,mounts,sources,confine,object,uncommittedOutput,bytes,source,verify};
 }

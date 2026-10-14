@@ -5,6 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {resolve,join,relative,isAbsolute,dirname} from 'node:path';
 import {verifyWorkspaceSelection} from './install-workspace-selection.mjs';
+import {workspaceSourceReader} from './read-workspace-source.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const within=(root,file)=>{const offset=relative(root,file);return !isAbsolute(offset)&&offset!=='..'&&!offset.startsWith('../');};
@@ -42,6 +43,12 @@ export async function generateWorkspaceTypeScript(selection){
     const recipe=/^tsc -p (tsconfig(?:\.build)?\.json)$/u.exec(manifest.scripts?.['build:node']??manifest.scripts?.build??'');
     if(recipe)providers.set(manifest.name,{importer,root,manifest,bytes,configuration:recipe[1]});
   }
+  const reader=await workspaceSourceReader({workspace,commit:selection.commit,importerIds:selection.importerIds});
+  for(const provider of providers.values()){
+    const require=createRequire(join(provider.root,'package.json')),ts=require('typescript');
+    const contract=workspaceTypeScriptOutputContract({root:provider.root,manifest:provider.manifest,compiler:ts,readSource:reader.source});
+    provider.outputs=new Set(contract.outputs.map(({output})=>reader.uncommittedOutput(output)));
+  }
   const active=new Set(),done=new Set(),packages=[];
   async function emit(name){
     if(done.has(name))return;
@@ -59,8 +66,8 @@ export async function generateWorkspaceTypeScript(selection){
     if(diagnostics.length)throw new Error(ts.formatDiagnosticsWithColorAndContext(diagnostics,{getCurrentDirectory:()=>root,getCanonicalFileName:file=>file,getNewLine:()=> '\n'}));
     const files=[],pending=[],outputNames=new Set();
     const emitted=program.emit(undefined,(name,text,bom,_onError,sources)=>{
-      const output=resolve(name);
-      if(!within(root,output)||!within(resolve(parsed.options.outDir),output))throw new Error('TypeScript emitted outside its configured owner output');
+      const output=reader.uncommittedOutput(resolve(name));
+      if(!provider.outputs.has(output))throw new Error('TypeScript emitted outside its exact configured output set');
       if(outputNames.has(output))throw new Error('TypeScript emitted conflicting output paths');
       outputNames.add(output);
       const bytes=Buffer.from((bom?'\uFEFF':'')+text);
@@ -82,6 +89,6 @@ export async function generateWorkspaceTypeScript(selection){
     active.delete(name);done.add(name);
   }
   for(const name of providers.keys())await emit(name);
-  await verifyWorkspaceSelection(selection);
+  await reader.verify();await verifyWorkspaceSelection(selection);
   return {type:'NodeRuntimeTypeScriptEmission',version:1,producer:{package:'@red-cup-engineering/node-runtime-release-promotion-service',path:'src/generate-workspace-typescript.mjs',sha256:sha(await readFile(fileURLToPath(import.meta.url)))},sourceCommit:selection.commit,sourceLockSha256:selection.sourceHashes['pnpm-lock.yaml'],scopedLockSha256:selection.scopedLockSha256,sourceConfigurationUnchanged:true,applicationExecuted:false,packages};
 }

@@ -27,14 +27,14 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
   for (const item of packages) {
     const contract = workspaceTypeScriptOutputContract({ root: item.root, manifest: item.manifest, compiler: ts, readSource: source });
     if (!contract) continue;
-    for (const output of contract.outputs) { source(output.input); declaredOutputs.set(output.output, { package: item.manifest.name, configuration: contract.configuration, input: output.input }); }
+    for (const output of contract.outputs) { source(output.input); reader.uncommittedOutput(output.output); declaredOutputs.set(output.output, { package: item.manifest.name, configuration: contract.configuration, input: output.input }); }
   }
   const moduleContracts = [];
   for (const item of packages) {
     const contract = workspaceModuleGenerationContract(item);
     if (!contract) continue;
     source(contract.module); moduleContracts.push(contract);
-    for (const output of contract.outputs) { confine(output); if (declaredOutputs.has(output)) throw new TypeError("source producers declare conflicting output paths"); declaredOutputs.set(output, { package: item.manifest.name, module: contract.module, export: contract.export }); }
+    for (const output of contract.outputs) { reader.uncommittedOutput(output); if (declaredOutputs.has(output)) throw new TypeError("source producers declare conflicting output paths"); declaredOutputs.set(output, { package: item.manifest.name, module: contract.module, export: contract.export }); }
   }
   const generatedOwner = file => declaredOutputs.has(resolve(file));
   const resolveSource = javascriptSourceResolver(packages);

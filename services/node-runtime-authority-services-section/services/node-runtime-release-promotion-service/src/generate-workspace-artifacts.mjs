@@ -4,7 +4,8 @@ import {readFile,realpath,lstat,mkdir,writeFile,chmod} from 'node:fs/promises';
 import {join,resolve,dirname,isAbsolute} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {verifyWorkspaceSelection} from './install-workspace-selection.mjs';
-import {generateWorkspaceTypeScript} from './generate-workspace-typescript.mjs';
+import {generateWorkspaceTypeScript,workspaceTypeScriptOutputContract} from './generate-workspace-typescript.mjs';
+import {createRequire} from 'node:module';
 import {workspaceSourceReader} from './read-workspace-source.mjs';
 import {workspaceModuleGenerationContract} from './workspace-module-generation.mjs';
 
@@ -15,17 +16,29 @@ const literal=path=>typeof path==='string'&&path&&!isAbsolute(path)&&!/[\\\0]/u.
  * No build command, optional example assay or application is invoked. */
 export async function generateWorkspaceArtifacts(selection){
   const workspace=await verifyWorkspaceSelection(selection),packages=[];
-  const typescript=await generateWorkspaceTypeScript(selection);
   const reader=await workspaceSourceReader({workspace,commit:selection.commit,importerIds:selection.importerIds});
   const now=new Date().toISOString();
-  const outputPaths=new Set(typescript.packages.flatMap(row=>row.files.map(file=>resolve(workspace,row.importer,file.path))));
+  const outputPaths=new Set();
   const providers=[];
   for(const importer of selection.importerIds){
     const root=join(workspace,importer),manifestBytes=reader.bytes(join(root,'package.json')),manifest=JSON.parse(manifestBytes);
+    const recipe=manifest.scripts?.['build:node']??manifest.scripts?.build??'';
+    if(/^tsc -p (tsconfig(?:\.build)?\.json)$/u.test(recipe)){
+      const compiler=createRequire(join(root,'package.json'))('typescript');
+      for(const {output}of workspaceTypeScriptOutputContract({root,manifest,compiler,readSource:reader.source}).outputs){
+        reader.uncommittedOutput(output);
+        if(outputPaths.has(output))throw new Error('configured compiler or module products collide');
+        outputPaths.add(output);
+      }
+    }
     const contract=workspaceModuleGenerationContract({root,manifest});
     if(!contract)continue;
-    for(const output of contract.outputs){if(outputPaths.has(output))throw new Error('declared source products collide with actual compiler or module products');outputPaths.add(output);}
+    for(const output of contract.outputs){reader.uncommittedOutput(output);if(outputPaths.has(output))throw new Error('declared source products collide with actual compiler or module products');outputPaths.add(output);}
     providers.push({importer,root,manifestBytes,manifest,contract});
+  }
+  const typescript=await generateWorkspaceTypeScript(selection);
+  for(const row of typescript.packages)for(const file of row.files){
+    if(!outputPaths.has(resolve(workspace,row.importer,file.path)))throw new Error('compiler emitted an undeclared product');
   }
   for(const {importer,root,manifestBytes,manifest,contract}of providers){
     const moduleBytes=reader.bytes(contract.module),inputs=new Map();
@@ -49,7 +62,7 @@ export async function generateWorkspaceArtifacts(selection){
     await reader.verify();
     const files=[];
     for(const [output,product]of products){
-      reader.confine(output);
+      reader.uncommittedOutput(output);
       await mkdir(dirname(output),{recursive:true});
       if(await realpath(dirname(output))!==dirname(output))throw new Error('source-product output parent is redirected');
       const held=await lstat(output).catch(error=>{if(error.code==='ENOENT')return null;throw error;});

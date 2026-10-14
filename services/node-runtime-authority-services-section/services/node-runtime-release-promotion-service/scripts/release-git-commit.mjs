@@ -121,7 +121,7 @@ export async function releaseGitCommit({
   if (spec.backup && (!Number.isInteger(spec.backup.keepDays ?? 14) || (spec.backup.keepDays ?? 14) < 0)) throw new Error("backup.keepDays must be a non-negative integer");
   const scripts = relative(treeRoot(here), here);
   const local = !spec.host || spec.host === "local";
-  if (spec.entrances?.length && !local) throw new Error("edge entrance delivery requires the local release queue");
+  if (Object.hasOwn(spec, "entrances")) throw new TypeError("Node runtime release does not own Caddy ingress; compose entrances in the machine's Guix service tree");
   if (spec.runtimes?.length && !local) throw new Error("independent runtime bindings require the local host");
   let runtime = local ? quote(process.execPath) : "node";
   // Installers and verification commands must use the same Node as this release.
@@ -657,11 +657,6 @@ const runtimePlans = await timed("runtime closures", () => prepareRuntimeBinding
   runtimes: spec.runtimes, home: localHome, repository,
   compilerPackage: resolve(localHome, release, scripts, '../package.json'),
 }));
-const entranceRuntime = spec.entrances === undefined ? undefined : await import("../src/caddy-entrance.mjs");
-const entrancePlans = entranceRuntime === undefined ? undefined : await timed("edge entrances", () => entranceRuntime.prepareCaddyEntrances({
-  release: resolve(localHome, release), entrances: spec.entrances,
-  execute: (file, arguments_) => commandOutput(file, arguments_, { cwd: localHome, env: commandEnvironment }),
-}));
 if (admit) {
   onStep(`admitted ${commit} as ${materialized.artifactDigest}`);
   return { commit, release, materialized, admitted: true, ...(guixBuild ? { guix: guixBuild } : {}) };
@@ -712,7 +707,6 @@ const bindings = runtimeBindingTransaction(runtimePlans, {
   healthy: (plan) => run(`for i in $(seq 1 ${healthAttempts}); do ${healthProbeOf(plan.health, plan.healthExpect)} && exit 0; sleep ${healthIntervalSeconds}; done; exit 1`).then(() => true, () => false),
   onStep,
 });
-const entrances = entranceRuntime?.caddyEntranceTransaction(entrancePlans, onStep);
 
 // A digest is returned to by an ordinary verified promotion; a hand-placed target by relinking.
 async function restore(target) {
@@ -782,13 +776,7 @@ try {
   if (spec.restart) await run(spec.restart);
   if (spec.health && !(await timed("health", healthy))) throw new Error(`${spec.health} did not answer`);
   await timed("runtime receivers", () => bindings.apply());
-  if (entrances !== undefined) await timed("edge receivers", () => entrances.apply());
 } catch (error) {
-  // Restore the old entrance before returning its node to the previous tree.
-  // Even a concurrent edge edit must not prevent node rollback.
-  await entrances?.rollback().catch((failure) => {
-    error.message += "; edge rollback refused: " + failure.message;
-  });
   if (!promotionAttempted) {
     // Snapshot creation or transfer failed: the existing pointer and unit are still intact.
     if (!stoppedForSnapshot) throw error;

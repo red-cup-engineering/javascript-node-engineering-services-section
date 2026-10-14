@@ -211,3 +211,33 @@ Source assessment reads the same declaration and authenticates the producer
 module; only its exact declared paths qualify as future module products. The owning caller
 packs these products through native PNPM and gives the resulting tree to LAGOON
 for Guix construction; no separate emission receipt is an activation input.
+
+## Selective packed-package receiving
+
+`receive-packed-packages --workspace ROOT [--pnpm EXECUTABLE] --runtime OUTPUT`
+receives only the real packed root consumer's committed `receivingPackages` list.
+Each selected source owner declares explicit `receivingTests` and optional
+`receivingFixtures` paths. Every selected manifest, test and fixture is admitted
+against native committed source before any test runs. Missing or empty selection
+returns `not-enrolled`, `satisfied: false`, with zero executed checks.
+
+The operation uses the caller's current pinned Node, records its real executable
+and version, and runs each explicit file with `--test --test-reporter=tap` in its
+packed package. It never runs npm scripts, discovers an implicit all-package suite,
+or accepts a command/environment override. Each file has a 180-second and 64-MiB
+output bound. A dedicated Linux process group cleans up its CLI children on timeout,
+cancellation, overflow and leader exit. Inherited credentials and Node loaders/test
+controls are stripped. This cleanup is not a sandbox: enroll only reviewed offline
+fixture cases, never live HTTP providers, purchases or publication effects.
+
+Nonzero/process/TAP failures, all-skipped/empty cases and identity drift refuse with
+ordered observations. Later checks remain explicitly unexecuted; partial skips are
+reported. Both source and packed identities are rechecked before and after execution.
+Results are observations, not a new source, installation or deployment authority.
+The source-owned component contract and extraction history are in
+`specifications/packed-package-receiving.md` and
+`specifications/packed-package-receiving-provenance.md`.
+
+The owning caller may invoke this generic command after its ordinary PNPM packing
+and static compilation, before construction. This component does not modify that
+caller, enroll any product package or activate a deployment.

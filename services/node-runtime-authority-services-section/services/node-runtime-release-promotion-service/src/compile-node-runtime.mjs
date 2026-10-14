@@ -2,9 +2,9 @@
 import { build } from "esbuild";
 import { declaredNodeRuntimeEntries } from "./source-entrances.mjs";
 import { parseJavaScript } from "@red-cup-engineering/javascript-node-services-section/javascript-parser";
-import assert from "node:assert/strict";
+import {comparePackedManifest,readPackedWorkspacePackages} from "./packed-workspace-packages.mjs";
 import { readNodeWorkspace } from "./read-workspace-source.mjs";
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { nodeJobProgramEntries } from "@red-cup-engineering/node-job-service";
 
@@ -45,38 +45,17 @@ function carrier(root, manifest) {
 if (source !== undefined) {
   const manifests = source.importerIds.map(id => ({ id, manifest: JSON.parse(readFileSync(join(source.workspace, id, "package.json"), "utf8")) }));
   const providers = new Map(manifests.map(item => [item.manifest.name, item]));
-  const comparePacked = (manifest, source) => {
-    for (const field of ["name", "version", "type", "exports", "bin", "main", "files"]) {
-      assert.deepEqual(manifest[field], source.manifest[field], "packed declaration differs from workspace source: " + manifest.name + "." + field);
-    }
-  };
   for (const name of providers.keys()) workspaceNames.add(name);
   if (runtime === undefined) for (const { id, manifest } of manifests) carrier(resolve(source.workspace, id), manifest);
   else {
-    // Inspect only the portable pnpm closure and its two package-directory levels.
-    const seen = new Set();
-    const rootManifest = JSON.parse(readFileSync(join(runtime, "package.json"), "utf8"));
-    const rootSource = providers.get(rootManifest.name);
+    const packed = readPackedWorkspacePackages(runtime);
+    const rootSource = providers.get(packed.packages[0].manifest.name);
     if (!rootSource) throw new TypeError("packed runtime root is outside the source workspace");
-    comparePacked(rootManifest, rootSource);
-    seen.add(realpathSync(runtime));
-    carrier(runtime, rootManifest);
-    const modules = [join(runtime, "node_modules"), ...readdirSync(join(runtime, "node_modules/.pnpm"), { withFileTypes: true }).filter(entry => entry.isDirectory() && entry.name !== "node_modules").map(entry => join(runtime, "node_modules/.pnpm", entry.name, "node_modules"))];
-    for (const directory of modules) {
-      if (!existsSync(directory)) continue;
-      for (const entry of readdirSync(directory)) {
-        if (entry.startsWith(".") || entry === "node_modules") continue;
-        const roots = entry.startsWith("@") ? readdirSync(join(directory, entry)).map(name => join(directory, entry, name)) : [join(directory, entry)];
-        for (const root of roots) {
-          const file = join(root, "package.json");
-          if (!existsSync(file)) continue;
-          const manifest = JSON.parse(readFileSync(file, "utf8")), source = providers.get(manifest.name);
-          const identity = realpathSync(root);
-          if (!source || seen.has(identity)) continue;
-          comparePacked(manifest, source);
-          seen.add(identity); carrier(identity, manifest);
-        }
-      }
+    for (const {directory,manifest} of packed.packages) {
+      const owner = providers.get(manifest.name);
+      if (!owner) continue;
+      comparePackedManifest(manifest, owner.manifest);
+      carrier(directory, manifest);
     }
   }
 }
@@ -129,4 +108,3 @@ return { type: "NodeRuntimeSourceCompilation", version: 1, status: "compiled", e
   externalModules: [...externalModules].sort(), nativeBindingsExecuted: false };
 
 }
-

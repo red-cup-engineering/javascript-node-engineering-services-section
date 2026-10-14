@@ -14,7 +14,8 @@
     "./service": "./src/node-service.mjs",
     "./source-delivery": "./src/source-delivery.mjs",
     "./compile-node-runtime": "./src/compile-node-runtime.mjs",
-    "./generate-workspace-typescript": "./src/generate-workspace-typescript.mjs"
+    "./generate-workspace-typescript": "./src/generate-workspace-typescript.mjs",
+    "./assess-source-interfaces": "./src/assess-source-interfaces.mjs"
   },
   "bin": {
     "promote-node-runtime-release": "./scripts/promote-node-runtime-release.mjs",
@@ -23,7 +24,8 @@
     "install-workspace-selection": "./scripts/install-workspace-selection.mjs",
     "reconcile-node-release": "./scripts/reconcile-node-release.mjs",
     "run-workspace-selection": "./scripts/run-workspace-selection.mjs",
-    "compile-node-runtime": "./scripts/compile-node-runtime.mjs"
+    "compile-node-runtime": "./scripts/compile-node-runtime.mjs",
+    "assess-node-runtime-source": "./scripts/assess-source-interfaces.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"
@@ -31,7 +33,9 @@
   "dependencies": {
     "esbuild": "0.28.1",
     "@red-cup-engineering/computer-content-address-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/node-job-service": "workspace:*"
+    "@red-cup-engineering/node-job-service": "workspace:*",
+    "@red-cup-engineering/javascript-node-services-section": "workspace:*",
+    "@red-cup-engineering/javascript-computer": "workspace:*"
   },
   "engines": {
     "node": ">=22.18"

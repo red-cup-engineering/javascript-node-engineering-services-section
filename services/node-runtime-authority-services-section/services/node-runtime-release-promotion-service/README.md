@@ -209,3 +209,23 @@ The programmatic `runWorkspaceSelection` API optionally takes `deployOutput` for
 
 After successful execution, the existing command receipt records `produced.directory` and `produced.files`: SHA-256 identities of regular nonredirected `package.json`, `pnpm-lock.yaml`, and optional `pnpm-workspace.yaml`. Optional absence is a null hash. The selection is revalidated after observation; failure returns no successful receipt and leaves partial-output cleanup to the enclosing caller. These are PNPM's observed root products, not a caller-selected inventory. The consumer must compare them before accepting normalized root metadata. They do not prove all generated runtime bodies, dependency semantics, native receiving or activation. The caller retains its existing exclusive source/build lease.
 
+
+## Source interfaces before installation
+
+Selected installation assesses the exact committed workspace module family before
+installing application dependencies. `assess-node-runtime-source --selection PATH`
+can receive the same source selection independently. It uses the published
+package entrances, native ESM resolver and JavaScript module corpus; its receipt
+retains Git identities, the finite module graph, demanded names, declaration
+locations, constructor/function parameters and authored JSDoc. Missing owned
+carriers or bindings refuse before installation. Registry interfaces, computed
+dynamic imports, unsupported syntax and products of declared TypeScript recipes
+remain explicitly unreceived; source assessment does not manufacture an emitted
+file or establish execution/resource guarantees. The real TypeScript producer
+and installed compiler must discharge those remaining interfaces afterward.
+
+Installed static compilation follows genuine vendor ESM declarations only for
+star re-exports. Ordinary vendor imports remain external, and the compiled
+output stays in memory. Both compilation success and refusal retain inspected
+modules; refusal receipts preserve diagnostics rather than losing the family
+scope. These receipts are source evidence, not a package or operating verdict.

@@ -686,6 +686,18 @@ export async function installWorkspaceSelection({
     // Even already-materialized and selector-based installs record the same
     // committed mount custody which later build/pack commands must re-receive.
     if (!materializeSources) sourceMounts = await receiveSelectedSources({ root, importerIds, environment });
+    // Assess exact current source interfaces before application dependencies are
+    // installed. Unknown registry/TS interfaces remain explicit receiving work;
+    // known missing owned bindings/carriers refuse before the expensive install.
+    const { assessSourceInterfaces } = await import("./assess-source-interfaces.mjs");
+    const sourceAssessment = await assessSourceInterfaces({ workspace: root, commit, importerIds, environment });
+    const sourceAssessmentPath = join(state, "source-interfaces-" + commit + ".json");
+    await writeFile(sourceAssessmentPath, json(sourceAssessment));
+    if (sourceAssessment.status === "refused") {
+      const error = new Error("selected authored interfaces require reconciliation before installation: " + sourceAssessment.missing.length);
+      error.sourceAssessmentPath = sourceAssessmentPath;
+      throw error;
+    }
     const workspaceArgs = importerIds.map((id) => "--workspace-packages=" + id);
     const exactFilters = exactImporterFilterArgs(importerIds);
     const scopedProjects = JSON.parse(await runPnpm([...workspaceArgs, ...exactFilters, "list", "--recursive", "--depth=-1", "--json"]));
@@ -703,7 +715,7 @@ export async function installWorkspaceSelection({
     const command = [...storeArgs, "--lockfile-dir=" + artifact, ...workspaceArgs, ...(selector === undefined ? exactFilters : ["--filter", selector]), "install", "--frozen-lockfile", "--ignore-scripts"];
     receipt = {
       type: "NodeRuntimeWorkspaceSelectionInstallReceipt", version: 1, ...identity,
-      recordedAt: new Date().toISOString(), artifact, tooling, importerIds, sourceMounts, selectionElapsedMilliseconds: Date.now() - startedAt,
+      recordedAt: new Date().toISOString(), artifact, tooling, importerIds, sourceMounts, sourceAssessment: { path: sourceAssessmentPath, sha256: digest(Buffer.from(json(sourceAssessment))), interfaceAdmissionComplete: sourceAssessment.interfaceAdmissionComplete }, selectionElapsedMilliseconds: Date.now() - startedAt,
       sourceImporterCount: Object.keys(sourceLock.importers).length,
       selectedPackageSnapshots: Object.keys(scopedLock.packages ?? {}).length,
       sourcePackageSnapshots: Object.keys(sourceLock.packages ?? {}).length,

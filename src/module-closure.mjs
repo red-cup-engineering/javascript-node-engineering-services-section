@@ -89,7 +89,7 @@ function packageDirectory(name, from) {
   }
 }
 
-function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode) {
+function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode, sourcePackages) {
   if (specifier.startsWith("node:") || BUILTIN.has(specifier.split("/")[0])) return null;
   if (includeInstalled && sourceMode === "require") {
     try { return { file: createRequire(pathToFileURL(from)).resolve(specifier) }; }
@@ -126,19 +126,34 @@ function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode)
     if (!packageName || packageName.includes("%") || target.startsWith("@") && (!packageParts[0].slice(1) || !packageParts[1]))
       return { external: `invalid-import-target:${specifier}` };
     if (BUILTIN.has(target.split("/")[0])) return { builtin: `node:${target}` };
-    return resolveSpecifier(target, join(root, "package.json"), includeInstalled, sourceMode);
+    return resolveSpecifier(target, join(root, "package.json"), includeInstalled, sourceMode, sourcePackages);
   }
   const parts = specifier.split("/");
   const name = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
   // A package may import itself by its own name.
   const own = packageOf(from);
-  const directory = own.manifest.name === name && own.manifest.exports !== undefined ? own.root : packageDirectory(name, from);
+  const directory = own.manifest.name === name && own.manifest.exports !== undefined ? own.root : sourcePackages === undefined ? packageDirectory(name, from) : sourcePackages.get(name)?.root ?? null;
   if (directory === null) return { external: `unresolved:${specifier}` };
   const root = realpathSync(directory);
-  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const manifest = sourcePackages?.get(name)?.manifest ?? JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   if (!includeInstalled && root.split(sep).includes("node_modules")) return { external: `${manifest.name}@${manifest.version}` };
   const target = exported(manifest, specifier === name ? "." : `./${specifier.slice(name.length + 1)}`, sourceMode);
   return target === null ? { external: `unexported:${specifier}` } : { file: resolve(root, target) };
+}
+
+/** Resolve an ESM interface against the admitted source packages, without installation.
+ * The caller derives these packages from authenticated Git manifests; this
+ * catalogue supplies locations, never substitute export declarations.
+ */
+export function javascriptSourceResolver(packages) {
+  const owners = new Map();
+  for (const item of packages) {
+    if (!item.manifest?.name || owners.has(item.manifest.name)) throw new TypeError("source interfaces require unique named package owners");
+    const root = realpathSync(item.root);
+    if (JSON.stringify(JSON.parse(readFileSync(join(root, "package.json"), "utf8"))) !== JSON.stringify(item.manifest)) throw new TypeError("source catalogue differs from actual package manifest");
+    owners.set(item.manifest.name, { root, manifest: item.manifest });
+  }
+  return (specifier, from) => resolveSpecifier(specifier, from, false, "import", owners);
 }
 
 function importsOf(file, text, strict = false) {

@@ -93,9 +93,15 @@ if (acquiring) {
       }
       if(!rows.length)continue;
       const execute=plan=>execFileSync(plan.command,['-C',repository,...plan.arguments],{input:plan.input??undefined,env:{...process.env,...plan.environment},maxBuffer:32*1024*1024});
-      const local=new Set(execute(gitHistoryPlan.localObjects()).toString('utf8').trim().split('\n'));
-      const missing=[...new Set(rows.map(row=>row.oid).filter(oid=>!local.has(oid)))];
-      for(let offset=0;offset<missing.length;offset+=4096)execute(gitHistoryPlan.prefetchBlobs(missing.slice(offset,offset+4096)));
+      // The input workspace already holds its committed source. Never census
+      // its shared historical object store to read a bounded manifest set.
+      // Newly received mounts are the depth-one partial acquisitions that need
+      // explicit missing-object prefetch before the shared batch reader.
+      if(source.path!=='.'){
+        const local=new Set(execute(gitHistoryPlan.localObjects()).toString('utf8').trim().split('\n'));
+        const missing=[...new Set(rows.map(row=>row.oid).filter(oid=>!local.has(oid)))];
+        for(let offset=0;offset<missing.length;offset+=4096)execute(gitHistoryPlan.prefetchBlobs(missing.slice(offset,offset+4096)));
+      }
       const objects=rows.map(row=>row.oid),bodies=readBatchBlobs(objects,execute(gitHistoryPlan.blobs(objects)));
       for(let index=0;index<rows.length;index++){
         const {id,path}=rows[index],text=bodies[index],file=resolve(repository,path);

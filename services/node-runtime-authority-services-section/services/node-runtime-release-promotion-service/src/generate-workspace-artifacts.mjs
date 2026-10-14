@@ -3,10 +3,10 @@ import {createHash} from 'node:crypto';
 import {readFile,realpath,lstat,mkdir,writeFile,chmod} from 'node:fs/promises';
 import {join,resolve,dirname,isAbsolute} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {generateWorkspaceTypeScript,workspaceTypeScriptOutputContract} from './generate-workspace-typescript.mjs';
-import {createRequire} from 'node:module';
+import {prepareWorkspaceTypeScriptGeneration} from './generate-workspace-typescript.mjs';
 import {readNodeWorkspace} from './read-workspace-source.mjs';
-import {workspaceModuleGenerationContract} from './workspace-module-generation.mjs';
+import {workspaceModuleGenerationContract,workspaceGenerationOrder} from './workspace-module-generation.mjs';
+import {assessSourceInterfaces} from './assess-source-interfaces.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const literal=path=>typeof path==='string'&&path&&!isAbsolute(path)&&!/[\\\0]/u.test(path)&&path.split('/').every(part=>part&&part!=='.'&&part!=='..');
@@ -16,29 +16,31 @@ const literal=path=>typeof path==='string'&&path&&!isAbsolute(path)&&!/[\\\0]/u.
 export async function generateWorkspaceArtifacts(options){
   const source=await readNodeWorkspace(options),{workspace,reader}=source,packages=[];
   const now=new Date().toISOString();
-  const outputPaths=new Set();
+  const outputPaths=new Set(),typed=await prepareWorkspaceTypeScriptGeneration(source),generation=[];
+  for(const [name,provider]of typed.providers){
+    for(const output of provider.outputs){if(outputPaths.has(output))throw new Error('configured compiler products collide');outputPaths.add(output);}
+    generation.push({id:'typescript:'+name,kind:'typescript',name,inputs:provider.contract.parsed.fileNames.map(file=>resolve(file)),outputs:[...provider.outputs]});
+  }
   const providers=[];
   for(const importer of source.importerIds){
     const root=join(workspace,importer),manifestBytes=reader.bytes(join(root,'package.json')),manifest=JSON.parse(manifestBytes);
-    const recipe=manifest.scripts?.['build:node']??manifest.scripts?.build??'';
-    if(/^tsc -p (tsconfig(?:\.build)?\.json)$/u.test(recipe)){
-      const compiler=createRequire(join(root,'package.json'))('typescript');
-      for(const {output}of workspaceTypeScriptOutputContract({root,manifest,compiler,readSource:reader.source}).outputs){
-        reader.uncommittedOutput(output);
-        if(outputPaths.has(output))throw new Error('configured compiler or module products collide');
-        outputPaths.add(output);
-      }
-    }
     const contract=workspaceModuleGenerationContract({root,manifest});
     if(!contract)continue;
     for(const output of contract.outputs){reader.uncommittedOutput(output);if(outputPaths.has(output))throw new Error('declared source products collide with actual compiler or module products');outputPaths.add(output);}
-    providers.push({importer,root,manifestBytes,manifest,contract});
+    const provider={importer,root,manifestBytes,manifest,contract,id:'module:'+manifest.name,kind:'module',inputs:[contract.module],outputs:contract.outputs};
+    providers.push(provider);generation.push(provider);
   }
-  const typescript=await generateWorkspaceTypeScript(options);
-  for(const row of typescript.packages)for(const file of row.files){
-    if(!outputPaths.has(resolve(workspace,row.importer,file.path)))throw new Error('compiler emitted an undeclared product');
-  }
-  for(const {importer,root,manifestBytes,manifest,contract}of providers){
+  const assessment=await assessSourceInterfaces({workspace,commit:source.commit,importerIds:source.importerIds,recursiveSource:true,sourceReader:reader});
+  const order=workspaceGenerationOrder(generation,assessment);
+  await reader.verify();
+  if(options.planOnly)return {type:'NodeRuntimeWorkspaceGenerationPlan',version:1,sourceCommit:source.commit,
+    applicationExecuted:false,productsEmitted:false,
+    importerIds:source.importerIds,...(source.filter===undefined?{}:{filter:source.filter}),
+    generationOrder:order.map(({provider,requires})=>({producer:provider.id,inputs:provider.inputs,outputs:provider.outputs,requires})),
+    sources:[...reader.sources.values()],missing:assessment.missing,unreceived:assessment.unreceived};
+  for(const {provider}of order){
+    if(provider.kind==='typescript'){await typed.emit(provider.name);continue;}
+    const {importer,root,manifestBytes,manifest,contract}=provider;
     const moduleBytes=reader.bytes(contract.module),inputs=new Map();
     const read=async path=>{
       if(!literal(path))throw new TypeError('source-product inputs must be canonical workspace-relative paths');
@@ -72,10 +74,16 @@ export async function generateWorkspaceArtifacts(options){
       module:{path:contract.declaration.module,export:contract.export,sha256:sha(moduleBytes)},publicationInstant:now,
       inputs:[...inputs.values()].sort((a,b)=>a.path.localeCompare(b.path)),files:files.sort((a,b)=>a.path.localeCompare(b.path))});
   }
+  const typescript=await typed.receipt();
+  for(const row of typescript.packages)for(const file of row.files){
+    if(!outputPaths.has(resolve(workspace,row.importer,file.path)))throw new Error('compiler emitted an undeclared product');
+  }
   await reader.verify();
   return {type:'NodeRuntimeWorkspaceEmission',version:1,
     producer:{package:'@red-cup-engineering/node-runtime-release-promotion-service',path:'src/generate-workspace-artifacts.mjs',sha256:sha(await readFile(fileURLToPath(import.meta.url)))},
     sourceCommit:source.commit,sourceLockSha256:sha(reader.bytes(join(workspace,'pnpm-lock.yaml'))),
-    sourceConfigurationUnchanged:true,applicationExecuted:false,typescript,packages};
+    sourceConfigurationUnchanged:true,applicationExecuted:false,
+    importerIds:source.importerIds,...(source.filter===undefined?{}:{filter:source.filter}),
+    generationOrder:order.map(({provider,requires})=>({producer:provider.id,requires})),typescript,packages};
 }
 

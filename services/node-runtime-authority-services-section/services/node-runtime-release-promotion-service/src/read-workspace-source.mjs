@@ -32,7 +32,7 @@ function recursiveSourceMounts(root){
 /** Read PNPM's actual whole workspace. Its root lock and configured registry
  * remain native inputs; no selected lock, source inventory or receipt is written.
  * Call after the owning caller's ordinary frozen PNPM installation. */
-export async function readNodeWorkspace({workspace,pnpm='pnpm'}={}){
+export async function readNodeWorkspace({workspace,pnpm='pnpm',filter}={}){
   if(typeof workspace!=='string'||!workspace)throw new TypeError('workspace root is required');
   const root=realpathSync(resolve(workspace));
   assert.equal(realpathSync(git(root,'rev-parse','--show-toplevel')),root,'workspace must be its Git root');
@@ -45,7 +45,8 @@ export async function readNodeWorkspace({workspace,pnpm='pnpm'}={}){
   const run=args=>execFileSync(pnpm,args,{cwd:root,encoding:'utf8',maxBuffer:32*1024*1024}).trim();
   const version=run(['--version']);
   assert.equal(manifest.packageManager,'pnpm@'+version,'use the package manager declared by the source owner');
-  const projects=JSON.parse(run(['list','--recursive','--depth=-1','--json']));
+  if(filter!==undefined&&(typeof filter!=='string'||!filter.trim()||filter!==filter.trim()||/[\0\r\n]/u.test(filter)))throw new TypeError('workspace filter must be a nonempty native PNPM selector');
+  const projects=JSON.parse(run(['list','--recursive','--depth=-1','--json',...(filter===undefined?[]:['--filter',filter,'--fail-if-no-match'])]));
   if(!Array.isArray(projects))throw new TypeError('PNPM returned no workspace project inventory');
   const importerIds=[...new Set(['.',...projects.map(project=>{
     if(typeof project.path!=='string')throw new TypeError('PNPM project has no source path');
@@ -55,7 +56,7 @@ export async function readNodeWorkspace({workspace,pnpm='pnpm'}={}){
   })])].sort();
   for(const id of importerIds)reader.bytes(join(root,id,'package.json'));
   await reader.verify();
-  return {workspace:root,commit,importerIds,reader};
+  return {workspace:root,commit,importerIds,reader,...(filter===undefined?{}:{filter})};
 }
 
 /** Exact Git-source reading shared by interface assessment and source producers. */

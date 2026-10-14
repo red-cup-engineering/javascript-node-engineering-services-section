@@ -35,6 +35,7 @@ export async function generateWorkspaceArtifacts(options){
   await reader.verify();
   if(options.planOnly)return {type:'NodeRuntimeWorkspaceGenerationPlan',version:1,sourceCommit:source.commit,
     applicationExecuted:false,productsEmitted:false,
+    importerIds:source.importerIds,...(source.filter===undefined?{}:{filter:source.filter}),
     generationOrder:order.map(({provider,requires})=>({producer:provider.id,inputs:provider.inputs,outputs:provider.outputs,requires})),
     sources:[...reader.sources.values()],missing:assessment.missing,unreceived:assessment.unreceived};
   for(const {provider}of order){
@@ -82,6 +83,7 @@ export async function generateWorkspaceArtifacts(options){
     producer:{package:'@red-cup-engineering/node-runtime-release-promotion-service',path:'src/generate-workspace-artifacts.mjs',sha256:sha(await readFile(fileURLToPath(import.meta.url)))},
     sourceCommit:source.commit,sourceLockSha256:sha(reader.bytes(join(workspace,'pnpm-lock.yaml'))),
     sourceConfigurationUnchanged:true,applicationExecuted:false,
+    importerIds:source.importerIds,...(source.filter===undefined?{}:{filter:source.filter}),
     generationOrder:order.map(({provider,requires})=>({producer:provider.id,requires})),typescript,packages};
 }
 

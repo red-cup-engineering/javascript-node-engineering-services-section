@@ -88,7 +88,7 @@ export async function prepareWorkspaceTypeScriptGeneration(source){
   }
   return {providers,emit,receipt:async()=>{
     await reader.verify();
-    return {type:'NodeRuntimeTypeScriptEmission',version:1,producer:{package:'@red-cup-engineering/node-runtime-release-promotion-service',path:'src/generate-workspace-typescript.mjs',sha256:sha(await readFile(fileURLToPath(import.meta.url)))},sourceCommit:source.commit,sourceLockSha256:sha(reader.bytes(join(workspace,'pnpm-lock.yaml'))),sourceConfigurationUnchanged:true,applicationExecuted:false,packages};
+    return {type:'NodeRuntimeTypeScriptEmission',version:1,producer:{package:'@red-cup-engineering/node-runtime-release-promotion-service',path:'src/generate-workspace-typescript.mjs',sha256:sha(await readFile(fileURLToPath(import.meta.url)))},sourceCommit:source.commit,sourceLockSha256:sha(reader.bytes(join(workspace,'pnpm-lock.yaml'))),sourceConfigurationUnchanged:true,applicationExecuted:false,importerIds:source.importerIds,...(source.filter===undefined?{}:{filter:source.filter}),packages};
   }};
 }
 

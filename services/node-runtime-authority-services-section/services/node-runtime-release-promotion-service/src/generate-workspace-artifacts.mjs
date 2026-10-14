@@ -18,10 +18,16 @@ export async function generateWorkspaceArtifacts(selection){
   const typescript=await generateWorkspaceTypeScript(selection);
   const reader=await workspaceSourceReader({workspace,commit:selection.commit,importerIds:selection.importerIds});
   const now=new Date().toISOString();
+  const outputPaths=new Set(typescript.packages.flatMap(row=>row.files.map(file=>resolve(workspace,row.importer,file.path))));
+  const providers=[];
   for(const importer of selection.importerIds){
     const root=join(workspace,importer),manifestBytes=reader.bytes(join(root,'package.json')),manifest=JSON.parse(manifestBytes);
     const contract=workspaceModuleGenerationContract({root,manifest});
     if(!contract)continue;
+    for(const output of contract.outputs){if(outputPaths.has(output))throw new Error('declared source products collide with actual compiler or module products');outputPaths.add(output);}
+    providers.push({importer,root,manifestBytes,manifest,contract});
+  }
+  for(const {importer,root,manifestBytes,manifest,contract}of providers){
     const moduleBytes=reader.bytes(contract.module),inputs=new Map();
     const read=async path=>{
       if(!literal(path))throw new TypeError('source-product inputs must be canonical workspace-relative paths');

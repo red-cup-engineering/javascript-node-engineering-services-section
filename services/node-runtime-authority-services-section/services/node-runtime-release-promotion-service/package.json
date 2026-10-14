@@ -25,6 +25,8 @@
     "reconcile-node-release": "./scripts/reconcile-node-release.mjs",
     "run-workspace-selection": "./scripts/run-workspace-selection.mjs",
     "compile-node-runtime": "./scripts/compile-node-runtime.mjs",
+    "generate-workspace-typescript": "./scripts/generate-workspace-typescript.mjs",
+    "resolve-workspace-selection": "./scripts/resolve-workspace-selection.mjs",
     "assess-node-runtime-source": "./scripts/assess-source-interfaces.mjs"
   },
   "scripts": {
@@ -34,6 +36,7 @@
     "esbuild": "0.28.1",
     "@red-cup-engineering/computer-content-address-engineering-services-section": "workspace:*",
     "@red-cup-engineering/node-job-service": "workspace:*",
+    "@red-cup-engineering/git-services-section": "workspace:*",
     "@red-cup-engineering/javascript-node-services-section": "workspace:*",
     "@red-cup-engineering/javascript-computer": "workspace:*",
     "typescript": "5.9.3"

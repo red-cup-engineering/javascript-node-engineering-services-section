@@ -5,8 +5,9 @@ import { spawn, execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import { gitHistoryPlan, readBatchBlobs } from "@red-cup-engineering/git-services-section/git-command-codec";
 import { pathToFileURL, fileURLToPath } from "node:url";
-import { receiveSelectedSources, selectLockedWorkspaceClosure, readWorkspaceSelectionLock, verifyWorkspaceSelection, exactImporterFilterArgs } from "../src/install-workspace-selection.mjs";
+import { receiveSelectedSources, selectDeclaredWorkspaceClosure, readWorkspaceSelectionLock, verifyWorkspaceSelection, exactImporterFilterArgs } from "../src/install-workspace-selection.mjs";
 const producerFile=fileURLToPath(import.meta.url),producerRoot=execFileSync('git',['-C',dirname(producerFile),'rev-parse','--show-toplevel'],{encoding:'utf8'}).trim();
 const producerCommit=execFileSync('git',['-C',producerRoot,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),producerPath=relative(producerRoot,producerFile);
 const producerBytes=readFileSync(producerFile),committedProducer=execFileSync('git',['-C',producerRoot,'show',producerCommit+':'+producerPath]);
@@ -22,16 +23,24 @@ const previous = JSON.parse(readFileSync(flags.receipt, "utf8"));
 const planned = previous.type === "NodeRuntimeLockedSourceSelection";
 if ((!planned && (previous.type !== "NodeRuntimeWorkspaceSelectionInstallReceipt" || previous.status !== "installed")) || previous.sourceConfigurationUnchanged !== true) throw new TypeError("an unchanged installed selection or locked source plan is required");
 const root = planned ? realpathSync(previous.workspace) : await verifyWorkspaceSelection(previous);
-let ids = [...new Set([...previous.importerIds, ...flags.importers])].sort();
-if (planned) {
+const acquiring=planned||flags.sourceLock!==undefined||flags.importers.some(id=>!previous.importerIds.includes(id));
+let ids = [...new Set(['.',...(acquiring?(previous.roots??previous.importerIds):previous.importerIds), ...flags.importers])].sort();
+if (acquiring) {
   const commit=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim();
-  if(commit!==previous.commit||createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex')!==previous.sourceLockSha256)throw new Error('locked source plan differs from its exact committed input');
+  if(commit!==previous.commit||createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex')!==(previous.sourceLockSha256??previous.sourceHashes['pnpm-lock.yaml']))throw new Error('source resolution differs from its exact committed input');
   const locked=await readWorkspaceSelectionLock({workspace:root,tooling:previous.tooling});
-  // An authored provider may have no historical importer yet. Follow existing
-  // locked edges, and keep new demand for exact-source manifest receiving below.
-  const lockedClosure=inputs=>[...new Set([...selectLockedWorkspaceClosure({lockfile:locked,
-    importerIds:inputs.filter(id=>Object.hasOwn(locked.importers,id)),workspace:root}),...inputs])].sort();
-  ids=lockedClosure(ids);
+  let locators=locked.importers;
+  if(flags.sourceLock!==undefined){
+    if(resolve(flags.sourceLock)!==join(dirname(resolve(flags.sourceLock)),'pnpm-lock.yaml'))throw new TypeError('upstream source lock must name its actual pnpm-lock.yaml carrier');
+    const require=createRequire(resolve(previous.tooling,'package.json'));
+    const {readWantedLockfile}=await import(pathToFileURL(require.resolve('@pnpm/lockfile.fs')).href);
+    const supplied=await readWantedLockfile(dirname(resolve(flags.sourceLock)),{ignoreIncompatible:false});
+    if(String(supplied.lockfileVersion)!==String(locked.lockfileVersion))throw new TypeError('upstream and receiving locks use different codecs');
+    // Supplementary paths are locator evidence only. No joined lock is written.
+    locators={...supplied.importers,...locked.importers};
+  }
+  // The historical lock locates a demanded supplier; it never admits that
+  // supplier's historical dependency graph. Read current source before descent.
   let mounts=await receiveSelectedSources({root,importerIds:ids,materialize:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
   // Current authored manifests govern demand; the old lock is resolution input.
   // New package owners are discovered from the committed source objects in
@@ -44,18 +53,6 @@ if (planned) {
   if(!Array.isArray(workspacePatterns)||workspacePatterns.some(pattern=>typeof pattern!=='string'))throw new Error('source workspace must declare package patterns');
   const workspaceOwner=id=>id==='.'||(workspacePatterns.some(pattern=>!pattern.startsWith('!')&&matchesGlob(id,pattern))
     &&!workspacePatterns.some(pattern=>pattern.startsWith('!')&&matchesGlob(id,pattern.slice(1))));
-  const committedCandidates=()=>{
-    const found=new Set(Object.keys(locked.importers).filter(workspaceOwner));
-    for(const source of [{path:'.',revision:previous.commit},...mounts]){
-      const repository=source.path==='.'?root:resolve(root,source.path);
-      const files=execFileSync('git',['-c','core.hooksPath=/dev/null','-C',repository,'ls-tree','-r','-z','--name-only',source.revision],{encoding:'utf8',maxBuffer:32*1024*1024,stdio:['ignore','pipe','pipe']});
-      for(const file of files.split('\0').filter(file=>file==='package.json'||file.endsWith('/package.json'))){
-        const id=relative(root,resolve(repository,dirname(file))).split('\\').join('/')||'.';
-        if(workspaceOwner(id))found.add(id);
-      }
-    }
-    return [...found].sort();
-  };
   const readOwnedManifest=(id)=>{
     const file=resolve(root,id,'package.json');
     const offset=relative(root,file);if(isAbsolute(offset)||offset==='..'||offset.startsWith('../')||typeof id!=='string'||id.includes('\0'))throw new Error('provider metadata leaves the selected source root');
@@ -70,31 +67,87 @@ if (planned) {
     if(existsSync(file)&&!readFileSync(file).equals(committed))throw new Error('provider manifest differs from exact received source: '+id);
     return JSON.parse(committed);
   };
+  const locate=(id,ref)=>{
+    if(typeof ref!=='string'||!ref.startsWith('link:'))return undefined;
+    const target=resolve(root,id,ref.slice(5)),offset=relative(root,target);
+    if(isAbsolute(offset)||offset==='..'||offset.startsWith('../'))throw new Error('provider locator leaves source root');
+    const path=offset.split('\\').join('/')||'.';
+    if(!workspaceOwner(path))throw new Error('provider locator is outside authored workspace');
+    return path;
+  };
+  const expectedNames=new Map();
+  const manifestCache=new Map();
+  const receiveCandidateManifests=()=>{
+    for(const source of [{path:'.',revision:previous.commit},...mounts]){
+      const repository=source.path==='.'?root:resolve(root,source.path);
+      const tree=execFileSync('git',['-c','core.hooksPath=/dev/null','-C',repository,'ls-tree','-r','-z',source.revision],{encoding:'utf8',maxBuffer:32*1024*1024});
+      const rows=[];
+      for(const row of tree.split('\0').filter(Boolean)){
+        const tab=row.indexOf('\t'),[mode,type,oid]=row.slice(0,tab).split(' '),path=row.slice(tab+1);
+        if(path!=='package.json'&&!path.endsWith('/package.json'))continue;
+        const id=relative(root,resolve(repository,dirname(path))).split('\\').join('/')||'.';
+        const owner=[{path:'.',revision:previous.commit},...mounts].filter(m=>m.path==='.'||id===m.path||id.startsWith(m.path+'/')).sort((a,b)=>b.path.length-a.path.length)[0];
+        if(!workspaceOwner(id)||owner.path!==source.path||manifestCache.has(id))continue;
+        if(type!=='blob'||!['100644','100755'].includes(mode))throw new Error('provider metadata must be a committed regular file: '+id);
+        rows.push({id,path,oid});
+      }
+      if(!rows.length)continue;
+      const execute=plan=>execFileSync(plan.command,['-C',repository,...plan.arguments],{input:plan.input??undefined,env:{...process.env,...plan.environment},maxBuffer:32*1024*1024});
+      // The input workspace already holds its committed source. Never census
+      // its shared historical object store to read a bounded manifest set.
+      // Newly received mounts are the depth-one partial acquisitions that need
+      // explicit missing-object prefetch before the shared batch reader.
+      if(source.path!=='.'){
+        const local=new Set(execute(gitHistoryPlan.localObjects()).toString('utf8').trim().split('\n'));
+        const missing=[...new Set(rows.map(row=>row.oid).filter(oid=>!local.has(oid)))];
+        for(let offset=0;offset<missing.length;offset+=4096)execute(gitHistoryPlan.prefetchBlobs(missing.slice(offset,offset+4096)));
+      }
+      const objects=rows.map(row=>row.oid),bodies=readBatchBlobs(objects,execute(gitHistoryPlan.blobs(objects)));
+      for(let index=0;index<rows.length;index++){
+        const {id,path}=rows[index],text=bodies[index],file=resolve(repository,path);
+        if(text===undefined)throw new Error('committed provider metadata was not received: '+id);
+        if(existsSync(file)&&(!lstatSync(file).isFile()||realpathSync(file)!==file||!readFileSync(file).equals(Buffer.from(text))))throw new Error('provider manifest differs or redirects committed source: '+id);
+        manifestCache.set(id,JSON.parse(text));
+      }
+    }
+  };
   for(;;){
-    const selected=ids.map(id=>({id,manifest:readOwnedManifest(id)})),names=new Set(selected.map(row=>row.manifest?.name)),missing=new Set();
+    const selected=ids.map(id=>({id,manifest:readOwnedManifest(id)})),names=new Set(selected.map(row=>row.manifest?.name)),missing=new Map(),additions=new Set();
     if(selected.some(row=>!row.manifest))throw new Error('selected provider manifest has no received source');
-    for(const {manifest}of selected)for(const field of ['dependencies','devDependencies','optionalDependencies'])for(const[name,version]of Object.entries(manifest[field]??{}))if(version.startsWith('workspace:')&&!names.has(name))missing.add(name);
-    if(!missing.size)break;
-    const candidates=new Map([...missing].map(name=>[name,[]]));
-    for(const id of committedCandidates()){if(ids.includes(id))continue;const manifest=readOwnedManifest(id);if(candidates.has(manifest?.name))candidates.get(manifest.name).push(id);}
-    const additions=[];
-    for(const[name,paths]of candidates){if(paths.length!==1)throw new Error('current workspace demand needs one received provider for '+name+': '+paths.length);additions.push(paths[0]);}
-    ids=lockedClosure([...ids,...additions]);
+    for(const {id,manifest}of selected){
+      if(expectedNames.has(id)&&manifest.name!==expectedNames.get(id))throw new Error('historical locator does not receive the demanded provider: '+id);
+      for(const field of ['dependencies','devDependencies','optionalDependencies'])for(const[name,version]of Object.entries(manifest[field]??{})){
+        if(typeof version!=='string')throw new TypeError('invalid current declared dependency: '+name);
+        if(version.startsWith('file:'))throw new Error('selected source cannot relocate local file dependencies: '+name);
+        if(version.startsWith('link:')){const path=locate(id,version);if(!ids.includes(path))additions.add(path);}
+        if(version.startsWith('workspace:')&&!names.has(name)){
+          if(!missing.has(name))missing.set(name,new Set());
+          const path=locate(id,locators[id]?.[field]?.[name]);
+          if(path)missing.get(name).add(path);
+        }
+      }
+    }
+    for(const[name,paths]of missing){
+      // A newly declared edge can still have a known locator elsewhere in the
+      // old lock. Otherwise inspect only already received committed owners.
+      if(!paths.size)for(const[id,importer]of Object.entries(locators))for(const field of ['dependencies','devDependencies','optionalDependencies']){
+        const path=locate(id,importer[field]?.[name]);if(path)paths.add(path);
+      }
+      if(!paths.size){receiveCandidateManifests();for(const[id,manifest]of manifestCache)if(!ids.includes(id)&&manifest.name===name)paths.add(id);}
+      if(paths.size!==1)throw new Error('current workspace demand needs one source locator for '+name+': '+paths.size);
+      const [path]=paths;if(expectedNames.has(path)&&expectedNames.get(path)!==name)throw new Error('source locator has competing package identities');
+      expectedNames.set(path,name);additions.add(path);
+    }
+    if(!additions.size)break;
+    ids=[...new Set([...ids,...additions])].sort();
     mounts=await receiveSelectedSources({root,importerIds:ids,materialize:true,environment:process.env,onOutput:text=>process.stderr.write(text)});
   }
 }
-if (flags.sourceLock !== undefined) {
-  if (resolve(flags.sourceLock) !== join(dirname(resolve(flags.sourceLock)), "pnpm-lock.yaml")) throw new TypeError("upstream source lock must name its actual pnpm-lock.yaml carrier");
-  const require = createRequire(resolve(previous.tooling, "package.json"));
-  const { readWantedLockfile } = await import(pathToFileURL(require.resolve("@pnpm/lockfile.fs")).href);
-  const supplied = await readWantedLockfile(dirname(resolve(flags.sourceLock)), { ignoreIncompatible: false });
-  const current = await readWantedLockfile(root, { ignoreIncompatible: false });
-  if (String(supplied.lockfileVersion) !== String(current.lockfileVersion)) throw new TypeError("upstream and receiving locks use different codecs");
-  // Read supplementary supplier paths, retaining the receiving composition's
-  // existing links. pnpm resolves the actual manifests below; no joined lock is written.
-  ids = selectLockedWorkspaceClosure({ lockfile: { ...supplied, importers: { ...supplied.importers, ...current.importers } }, importerIds: ids, workspace: root });
-  await receiveSelectedSources({ root, importerIds: ids, materialize: true, environment: process.env, onOutput: text => process.stderr.write(text) });
-}
+// The final traversal receives the same current demand used for acquisition.
+const acquiredImporterCount=ids.length;
+ids=selectDeclaredWorkspaceClosure({workspace:root,
+  importerIds:[...(previous.roots??previous.importerIds),...flags.importers],
+  projects:ids.map(id=>({id,manifest:JSON.parse(readFileSync(join(root,id,"package.json"),"utf8"))}))});
 const names = new Set();
 for (const id of ids) {
   const offset = relative(root, resolve(root, id));
@@ -111,9 +164,10 @@ for (const id of ids) {
 }
 // An unchanged installed demand already has a frozen pnpm receiving receipt.
 // Avoid mutable resolution, network discovery and a source write for that case.
-if(!planned&&flags.sourceLock===undefined&&flags.importers.every(id=>previous.importerIds.includes(id))){
+if(!planned&&flags.sourceLock===undefined&&flags.importers.every(id=>previous.importerIds.includes(id))
+  &&ids.length===previous.importerIds.length&&ids.every(id=>previous.importerIds.includes(id))){
   process.stdout.write(JSON.stringify({type:'NodeRuntimeWorkspaceSelectionResolution',version:1,workspace:root,
-    importerIds:ids,lockOwner:'pnpm',sourceConfigurationUnchanged:true,resolutionRequired:false,
+    importerIds:ids,acquiredImporterCount,lockOwner:'pnpm',sourceConfigurationUnchanged:true,resolutionRequired:false,
     applicationExecuted:false})+'\n');
   process.exit(0);
 }
@@ -124,6 +178,6 @@ child.stderr.on("data", chunk => process.stderr.write(chunk));
 const code = await new Promise((accept,reject) => {child.on("error",reject);child.on("exit",accept);});
 if (code !== 0) throw new Error("pnpm could not resolve the selected composition: " + code);
 if(!readFileSync(producerFile).equals(producerBytes))throw new Error('source resolver changed during resolution');
-process.stdout.write(JSON.stringify({type:"NodeRuntimeWorkspaceSelectionResolution",version:1,workspace:root,importerIds:ids,lockOwner:"pnpm",applicationExecuted:false,
+process.stdout.write(JSON.stringify({type:"NodeRuntimeWorkspaceSelectionResolution",version:1,workspace:root,importerIds:ids,acquiredImporterCount,lockOwner:"pnpm",applicationExecuted:false,
  inputCommit:previous.commit,inputSourceLockSha256:previous.sourceLockSha256??previous.sourceHashes['pnpm-lock.yaml'],resolvedSourceLockSha256:createHash('sha256').update(readFileSync(join(root,'pnpm-lock.yaml'))).digest('hex'),
  producer:{repository:'red-cup-engineering/computer-code-engineering-services-section',commit:producerCommit,path:producerPath,sha256:createHash('sha256').update(producerBytes).digest('hex')}})+"\n");

@@ -322,8 +322,7 @@ export function exactImporterFilterArgs(importerIds) {
 }
 
 /** Select source importers by following committed links, without discovering unrelated projects. */
-export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace }) {
-  if (String(lockfile?.lockfileVersion) !== "9.0") throw new Error("selected install requires a pnpm v9 lockfile");
+function selectWorkspacePaths({ importerIds, workspace, dependenciesOf }) {
   if (!Array.isArray(importerIds) || !importerIds.length) throw new TypeError("at least one importer path is required");
   const root = resolve(workspace), selected = new Set(), pending = [".", ...importerIds];
   while (pending.length) {
@@ -333,20 +332,58 @@ export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace 
     if (!contained(root, path)) throw new Error("importer escapes workspace: " + input);
     const id = portable(relative(root, path)) || ".";
     if (selected.has(id)) continue;
-    const importer = lockfile.importers?.[id];
-    if (!importer) throw new Error("selected importer is absent from the committed lock: " + id);
     selected.add(id);
+    for (const target of dependenciesOf(id)) pending.push(target);
+  }
+  return [...selected].sort();
+}
+
+/** Select source importers from the committed PNPM links, without deriving versions. */
+export function selectLockedWorkspaceClosure({ lockfile, importerIds, workspace }) {
+  if (String(lockfile?.lockfileVersion) !== "9.0") throw new Error("selected install requires a pnpm v9 lockfile");
+  const root = resolve(workspace);
+  return selectWorkspacePaths({importerIds,workspace,dependenciesOf(id) {
+    const importer = lockfile.importers?.[id], targets=[];
+    if (!importer) throw new Error("selected importer is absent from the committed lock: " + id);
     for (const field of fields) for (const [name, ref] of Object.entries(importer[field] ?? {})) {
       if (typeof ref !== "string") throw new TypeError("invalid locked dependency " + name + " from " + id);
       if (ref.startsWith("file:")) throw new Error("selected install cannot relocate local file dependencies: " + name);
       if (ref.startsWith("link:")) {
         const target = resolve(root, id, ref.slice(5));
         if (!contained(root, target)) throw new Error("workspace link escapes checkout: " + name + " from " + id);
-        pending.push(portable(relative(root, target)) || ".");
+        targets.push(portable(relative(root, target)) || ".");
       }
     }
+    return targets;
+  }});
+}
+
+/** Select current declared demand from already received manifests; PNPM still resolves versions. */
+export function selectDeclaredWorkspaceClosure({ projects, importerIds, workspace }) {
+  if(!Array.isArray(projects)||!projects.length)throw new TypeError("received workspace projects required");
+  const root=resolve(workspace),byId=new Map(),byName=new Map();
+  for(const {id,manifest} of projects) {
+    if(typeof id!=="string"||!id||isAbsolute(id)||id.includes("\0")||!contained(root,resolve(root,id))
+      ||portable(relative(root,resolve(root,id)))!==(id==="."?"":id)||typeof manifest?.name!=="string"||!manifest.name)
+      throw new TypeError("literal received project identity and manifest name required");
+    if(byId.has(id))throw new Error("duplicate received project: "+id);
+    byId.set(id,manifest);byName.set(manifest.name,[...(byName.get(manifest.name)??[]),id]);
   }
-  return [...selected].sort();
+  return selectWorkspacePaths({importerIds,workspace,dependenciesOf(id) {
+    const manifest=byId.get(id),targets=[];
+    if(!manifest)throw new Error("current demand has no received project: "+id);
+    for(const field of fields)for(const [name,version]of Object.entries(manifest[field]??{})) {
+      if(typeof version!=="string")throw new TypeError("invalid declared dependency "+name+" from "+id);
+      if(version.startsWith("file:"))throw new Error("selected install cannot relocate local file dependencies: "+name);
+      if(version.startsWith("link:"))targets.push(portable(relative(root,resolve(root,id,version.slice(5))))||".");
+      if(version.startsWith("workspace:")) {
+        const owners=byName.get(name)??[];
+        if(owners.length!==1)throw new Error("current workspace demand needs one received provider for "+name+": "+owners.length);
+        targets.push(owners[0]);
+      }
+    }
+    return targets;
+  }});
 }
 
 /** A package projection includes the recorded Git controls that govern its checkout. */

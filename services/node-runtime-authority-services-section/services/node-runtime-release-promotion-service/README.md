@@ -73,71 +73,41 @@ level-triggered and does one of the following:
 Each pass leaves its reading at `<releaseRoot>/status.json`. The 561 Group
 runs it as the `node-release-reconcile` operation on a node's work clock.
 
-## Install a selected closure from a real checkout
+## Fabricate the authoritative recursive workspace
 
-`scripts/install-workspace-selection.mjs` owns the dependency-install step for
-a selected host or development service. It takes an existing Git checkout; it
-does not copy application source, make a release, promote a pointer, restart a
-service or modify the checkout's full lockfile.
+The LAGOON production path uses Git's recorded recursive source owners, the
+root `pnpm-workspace.yaml`, `.npmrc` and unchanged native `pnpm-lock.yaml`.
+The caller acquires those Gitlinks with ordinary recursive Git checkout and
+runs the exact PNPM version declared by the root `packageManager`. It installs
+with `pnpm install --frozen-lockfile` and the workspace's existing build policy.
+There is no selected-install receipt, relocated source lock or separate
+source-inventory authority in this path.
 
-From the checkout root, with Node and pnpm 11.19 or newer already installed:
+The existing Code command entrances take the real source root directly:
 
-```sh
-installer="$(find lib -path '*/node-runtime-release-promotion-service/scripts/install-workspace-selection.mjs' -print -quit)"
-node "$installer" \
-  --workspace "$PWD" \
-  --selector '@561-group/cold-red-gate-host-deployment...' \
-  --state-dir "$HOME/.local/state/561-group/selected-installs"
-```
+- `generate-workspace-artifacts --workspace ROOT [--pnpm EXECUTABLE]`
+- `generate-workspace-typescript --workspace ROOT [--pnpm EXECUTABLE]`
+- `compile-node-runtime --workspace ROOT [--pnpm EXECUTABLE] [--runtime OUTPUT] [--entry MODULE...]`
+- `assess-node-runtime-source --workspace ROOT [--pnpm EXECUTABLE] [--entry MODULE...]`
 
-The selector must include the required workspace dependency closure. The state
-directory must be outside the checkout. Optional `--store-dir` selects the
-normal pnpm content-addressed store; `--pnpm` selects an already-installed
-executable. `--prepare-only` prepares the selected artifact without installing
-the application, but still installs the frozen lockfile tooling.
+PNPM supplies the complete workspace inventory with its native recursive list.
+The source reader checks the committed root and recursive Gitlink topology,
+including staged pins and changes to `.gitmodules`, before consuming sources.
+The package-manager version and source configuration remain those of the owner.
 
-The implementation delegates project selection to `pnpm list` and lockfile
-parsing, graph filtering and serialization to the official
-`@pnpm/lockfile.fs` and `@pnpm/lockfile.filtering` libraries. Their exact direct
-versions and complete transitive integrity records are kept in
-`data/selected-install-tools/`. This separate toolchain is bootstrapped with
-a frozen lock and ignored scripts, carrying the source's configured supply and
-build policies. It is not another source workspace or package graph analyzer.
+The aggregate generation command retains the declared TypeScript and
+source-product contracts described below. The caller then uses ordinary
+`pnpm --filter PACKAGE deploy --prod OUTPUT` and compiles that packed output
+with `--workspace ROOT --runtime OUTPUT`. PNPM derives its own deployment
+product lock without changing the committed source lock. Native dependency
+builds retain the existing `allowBuilds` policy; do not suppress scripts during
+deploy and assume that built binaries from the first install will be reused.
 
-pnpm 11 verifies every package in its wanted lockfile, even during a filtered
-install. Merely dropping package records also leaves unselected importer
-references that its pruning phase visits. The selected installation therefore
-uses both:
-
-- a generated external lockfile with only the selected complete graph, retaining
-  every selected version, integrity and peer snapshot
-- explicit `--workspace-packages` arguments matching that selection, while
-  retaining the source workspace's configuration and policies
-
-Only importer keys are rebased to the external lockfile directory. Existing
-workspace `link:` references still resolve to the actual source directories.
-Each selected package receives normal pnpm dependency links; the generated
-virtual store lives beside the external lockfile. The committed full lock must
-match HEAD and remains unchanged. Source manifests and configuration are checked
-again after installation.
-
-The result is a `NodeRuntimeWorkspaceSelectionInstallReceipt` containing the
-source commit, input hashes, selector, importer paths, exact command, artifact
-hashes and outcome. Generated state contains a pinned tooling directory and
-content-addressed selection directories. Keep that state while using the
-installation: source dependency links point into its virtual store.
-
-This bounded path refuses hooks, patches, local file dependencies and
-package-local source references whose relocation is not implemented. It also
-refuses incomplete workspace closures or changed locked records. It never
-turns off supply checks, changes checksums, downgrades pnpm or resolves around
-a missing selected dependency. Dependency lifecycle scripts remain ignored;
-any required build step is separate.
-
-The existing immutable-release promotion path is unchanged. This entry point
-is for bootstrap and development from real Git checkouts. An archived release
-without Git metadata is not silently treated as a checkout, and a generated
-selected lock must never replace the repository's full lock.
+Generation and compiler results describe actual outputs and diagnostics; they
+are not externally supplied deployment prerequisites. LAGOON and native Guix
+own construction and production generation changes. The older selected-install
+utilities are outside this production route and must not be used to recreate
+its source or lock authority.
 
 ## Independently scoped source receiving
 
@@ -193,34 +163,16 @@ same delivery retains the same commit and candidate name; independent receiving
 still judges it against current source. Candidate identity is not semantic proof
 or deployed-operation evidence.
 
-### Select source before materialization
+## Source interface assessment
 
-Use repeated `--importer <repository-relative-path>` instead of `--selector` to follow workspace `link:` edges in the committed lock, including root dependencies, before project discovery. This is source selection over resolved pins; pnpm still owns lock parsing, external graph filtering, supply policy and installation. `--revision <full-commit>` binds the checkout identity.
-
-A sparse package projection also includes recorded `.gitattributes` files at its directory ancestors: Git consumes these controls while checking out selected package bytes. Only controls governing a selected path are added; unrelated neighboring files remain excluded. Attribute carriers must be regular recorded Git files. The same projection is used for initial acquisition and later expansion.
-
-`--plan-only` reports that closure without materializing source or installing application dependencies. `--materialize-sources` adds the selected directories to an existing sparse checkout and initializes only recorded Gitlinks containing those importers, descending into selected nested mounts. It never recursively initializes unrelated children or advances an existing divergent mount. Modified mount configuration, staged pins and local selected-source changes are refused. Generated tooling and scoped locks stay outside the checkout.
-
-On the actual four-corpus dependency proposal, the fresh sparse RelConLang selection contained 217 of 803 importers and 17 source Gitlinks; an ordinary full recursive checkout initialized 90. The selected frozen install preserved the source configuration, and the real CLI returned its 12,312-byte language manifest exactly. These observations receive that consumer preparation, not HTTP deployment or registry publication.
-
-After a frozen selected install, use `run-workspace-selection <install-receipt> -- <pnpm arguments>` for generation and packing. It reuses the recorded explicit workspace paths and lock directory and refuses a changed revision, configuration, manifest or lock. This prevents subsequent pnpm commands from falling back to unrelated workspace discovery or silently performing a different install. The command does not establish runtime receiving.
-
-### Observe selected deploy products
-
-The programmatic `runWorkspaceSelection` API optionally takes `deployOutput` for the exact selected-root `--filter <name> --config.ignore-scripts=true --config.inject-workspace-packages=true deploy --prod <absolute-output>` invocation. The output must be absent, outside source, and under an existing canonical parent. Generic commands and the CLI keep their existing receipt shape.
-
-After successful execution, the existing command receipt records `produced.directory` and `produced.files`: SHA-256 identities of regular nonredirected `package.json`, `pnpm-lock.yaml`, and optional `pnpm-workspace.yaml`. Optional absence is a null hash. The selection is revalidated after observation; failure returns no successful receipt and leaves partial-output cleanup to the enclosing caller. These are PNPM's observed root products, not a caller-selected inventory. The consumer must compare them before accepting normalized root metadata. They do not prove all generated runtime bodies, dependency semantics, native receiving or activation. The caller retains its existing exclusive source/build lease.
-
-
-## Source interfaces before installation
-
-Selected installation assesses the exact committed workspace module family before
-installing application dependencies. `assess-node-runtime-source --selection PATH`
-can receive the same source selection independently. It uses the published
+`assess-node-runtime-source --workspace ROOT` assesses the exact committed
+recursive workspace module family using PNPM's source-owned membership. It does
+not install application dependencies or change the root lock. Run it after the
+caller's frozen installation has supplied the existing source-analysis tools. It uses the published
 package entrances, native ESM resolver and JavaScript module corpus; its receipt
 retains Git identities, the finite module graph, demanded names, declaration
 locations, constructor/function parameters and authored JSDoc. Missing owned
-carriers or bindings refuse before installation. Registry interfaces, computed
+carriers or bindings refuse assessment. Registry interfaces, computed
 dynamic imports, unsupported syntax and products of declared TypeScript recipes
 remain explicitly unreceived; source assessment does not manufacture an emitted
 file or establish execution/resource guarantees. The real TypeScript producer
@@ -235,13 +187,13 @@ scope. These receipts are source evidence, not a package or operating verdict.
 Source-product modules declare `nodeRuntimeGeneration` with exactly `module`,
 `export` and `outputs` in their owning package. `generateWorkspaceArtifacts`
 first receives the existing TypeScript products, then calls those declared
-exports with the exact selected `sourceRoot`, a Git-authenticated UTF-8 `read`
+exports with the exact recursive workspace `sourceRoot`, a Git-authenticated UTF-8 `read`
 operation and the actual publication instant. The module returns precisely its
 owned `{path,text}` products; the native writer alone records and writes their
 bytes. Undeclared/duplicate outputs and self-output reads refuse. Input records
 retain their original source commit, blob and digest. Shell recipes, optional
 examples, application execution and a generated-directory census are excluded.
-Pre-install assessment reads the same declaration and authenticates the producer
-module; only its exact declared paths qualify as future module products. Guix
-receives the combined native emission and independently matches module, inputs,
-output set and packed byte digests against the selected source.
+Source assessment reads the same declaration and authenticates the producer
+module; only its exact declared paths qualify as future module products. The owning caller
+packs these products through native PNPM and gives the resulting tree to LAGOON
+for Guix construction; no separate emission receipt is an activation input.

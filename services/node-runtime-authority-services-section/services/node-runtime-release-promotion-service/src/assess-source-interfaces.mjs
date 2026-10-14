@@ -15,9 +15,9 @@ import { workspaceModuleGenerationContract } from "./workspace-module-generation
  * Declared JSDoc/parameters are evidence for design review, not inferred
  * guarantees of execution, resource consumption or scientific correctness.
  */
-export async function assessSourceInterfaces({ workspace, commit, importerIds, entries = [], environment = process.env } = {}) {
+export async function assessSourceInterfaces({ workspace, commit, importerIds, entries = [], recursiveSource = false, environment = process.env } = {}) {
   if (!Array.isArray(entries) || entries.some(entry => typeof entry !== "string" || !entry)) throw new TypeError("explicit source programmes require nonempty paths");
-  const reader = await workspaceSourceReader({ workspace, commit, importerIds, environment });
+  const reader = await workspaceSourceReader({ workspace, commit, importerIds, recursive: recursiveSource, environment });
   const { root, mounts, sources, confine, source } = reader;
   const packages = importerIds.map(id => {
     const directory = resolve(root, id);

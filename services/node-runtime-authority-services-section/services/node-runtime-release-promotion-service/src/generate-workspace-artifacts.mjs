@@ -3,10 +3,9 @@ import {createHash} from 'node:crypto';
 import {readFile,realpath,lstat,mkdir,writeFile,chmod} from 'node:fs/promises';
 import {join,resolve,dirname,isAbsolute} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {verifyWorkspaceSelection} from './install-workspace-selection.mjs';
 import {generateWorkspaceTypeScript,workspaceTypeScriptOutputContract} from './generate-workspace-typescript.mjs';
 import {createRequire} from 'node:module';
-import {workspaceSourceReader} from './read-workspace-source.mjs';
+import {readNodeWorkspace} from './read-workspace-source.mjs';
 import {workspaceModuleGenerationContract} from './workspace-module-generation.mjs';
 
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -14,13 +13,12 @@ const literal=path=>typeof path==='string'&&path&&!isAbsolute(path)&&!/[\\\0]/u.
 
 /** Receive declared source-product modules at the existing Code writer.
  * No build command, optional example assay or application is invoked. */
-export async function generateWorkspaceArtifacts(selection){
-  const workspace=await verifyWorkspaceSelection(selection),packages=[];
-  const reader=await workspaceSourceReader({workspace,commit:selection.commit,importerIds:selection.importerIds});
+export async function generateWorkspaceArtifacts(options){
+  const source=await readNodeWorkspace(options),{workspace,reader}=source,packages=[];
   const now=new Date().toISOString();
   const outputPaths=new Set();
   const providers=[];
-  for(const importer of selection.importerIds){
+  for(const importer of source.importerIds){
     const root=join(workspace,importer),manifestBytes=reader.bytes(join(root,'package.json')),manifest=JSON.parse(manifestBytes);
     const recipe=manifest.scripts?.['build:node']??manifest.scripts?.build??'';
     if(/^tsc -p (tsconfig(?:\.build)?\.json)$/u.test(recipe)){
@@ -36,7 +34,7 @@ export async function generateWorkspaceArtifacts(selection){
     for(const output of contract.outputs){reader.uncommittedOutput(output);if(outputPaths.has(output))throw new Error('declared source products collide with actual compiler or module products');outputPaths.add(output);}
     providers.push({importer,root,manifestBytes,manifest,contract});
   }
-  const typescript=await generateWorkspaceTypeScript(selection);
+  const typescript=await generateWorkspaceTypeScript(options);
   for(const row of typescript.packages)for(const file of row.files){
     if(!outputPaths.has(resolve(workspace,row.importer,file.path)))throw new Error('compiler emitted an undeclared product');
   }
@@ -74,9 +72,10 @@ export async function generateWorkspaceArtifacts(selection){
       module:{path:contract.declaration.module,export:contract.export,sha256:sha(moduleBytes)},publicationInstant:now,
       inputs:[...inputs.values()].sort((a,b)=>a.path.localeCompare(b.path)),files:files.sort((a,b)=>a.path.localeCompare(b.path))});
   }
-  await reader.verify();await verifyWorkspaceSelection(selection);
+  await reader.verify();
   return {type:'NodeRuntimeWorkspaceEmission',version:1,
     producer:{package:'@red-cup-engineering/node-runtime-release-promotion-service',path:'src/generate-workspace-artifacts.mjs',sha256:sha(await readFile(fileURLToPath(import.meta.url)))},
-    sourceCommit:selection.commit,sourceLockSha256:selection.sourceHashes['pnpm-lock.yaml'],scopedLockSha256:selection.scopedLockSha256,
+    sourceCommit:source.commit,sourceLockSha256:sha(reader.bytes(join(workspace,'pnpm-lock.yaml'))),
     sourceConfigurationUnchanged:true,applicationExecuted:false,typescript,packages};
 }
+

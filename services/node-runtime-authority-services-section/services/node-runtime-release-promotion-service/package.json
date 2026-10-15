@@ -9,7 +9,6 @@
     "./digest": "./src/release-digest.mjs",
     "./reconcile": "./src/reconcile-release.mjs",
     "./install-workspace-selection": "./src/install-workspace-selection.mjs",
-    "./job": "./src/node-job.mjs",
     "./integrate": "./src/integrate.mjs",
     "./service": "./src/node-service.mjs",
     "./source-delivery": "./src/source-delivery.mjs",

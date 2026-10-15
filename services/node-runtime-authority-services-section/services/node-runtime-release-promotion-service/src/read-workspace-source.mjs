@@ -72,10 +72,26 @@ export async function workspaceSourceReader({workspace,commit,importerIds,recurs
     return receiveSelectedSources({root,importerIds,environment});
   };
   const mounts=await readMounts();
-  const repositories=[{path:'.',revision:commit},...mounts].map(item=>({...item,root:resolve(root,item.path)})).sort((a,b)=>b.root.length-a.root.length),trees=new Map(),sources=new Map();
-  for(const owner of repositories){
-    const rows=execFileSync('git',['-C',owner.root,'ls-tree','-r','-z',owner.revision],{encoding:'utf8',maxBuffer:32*1024*1024}).split('\0').filter(Boolean);
-    trees.set(owner.root,new Map(rows.map(row=>{const [head,path]=row.split('\t'),[mode,kind,identity]=head.split(' ');return [path,{mode,kind,identity}];})));
+  const repositories=[{path:'.',revision:commit},...mounts].map(item=>({...item,root:resolve(root,item.path),objects:new Map()})).sort((a,b)=>b.root.length-a.root.length),sources=new Map();
+  // A source read needs the requested path's authentic ancestor trees, not
+  // every unrelated tree in its owner. Keep the same pinned object facts as a
+  // recursive inventory, but obtain them through Git's literal path lookup.
+  function recordedObject(owner,path){
+    if(!path)return null;
+    if(owner.objects.has(path))return owner.objects.get(path);
+    const rows=execFileSync('git',['--literal-pathspecs','-C',owner.root,'ls-tree','-z',owner.revision,'--',path],
+      {encoding:'utf8',maxBuffer:32*1024*1024,env:{...environment,GIT_NO_LAZY_FETCH:'1'}}).split('\0').filter(Boolean);
+    let fact=null;
+    for(const row of rows){
+      const tab=row.indexOf('\t'),[mode,kind,identity]=row.slice(0,tab).split(' '),observed=row.slice(tab+1);
+      if(tab<0||observed!==path||!/^\d{6}$/u.test(mode)||!['blob','tree','commit'].includes(kind)||!/^[a-f0-9]{40}$/u.test(identity)||rows.length!==1)
+        throw new Error('Git returned an invalid exact source object: '+path);
+      // The former recursive inventory contained files and Gitlinks, not
+      // directory objects. Missing paths and directories still return null.
+      if(kind!=='tree')fact={mode,kind,identity};
+    }
+    owner.objects.set(path,fact);
+    return fact;
   }
   function confine(file){
     file=resolve(file);
@@ -90,7 +106,7 @@ export async function workspaceSourceReader({workspace,commit,importerIds,recurs
   }
   function object(file){
     file=confine(file);
-    const owner=repositories.find(item=>contained(item.root,file)),path=relative(owner.root,file).split(sep).join('/'),fact=trees.get(owner.root).get(path);
+    const owner=repositories.find(item=>contained(item.root,file)),path=relative(owner.root,file).split(sep).join('/'),fact=recordedObject(owner,path);
     return fact?{path:relative(root,file).split(sep).join('/'),sourceRepository:owner.path,sourceCommit:owner.revision,sourcePath:path,...fact}:null;
   }
   function uncommittedOutput(file){

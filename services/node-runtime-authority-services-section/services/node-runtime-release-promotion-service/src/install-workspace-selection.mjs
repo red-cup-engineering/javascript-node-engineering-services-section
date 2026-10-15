@@ -402,8 +402,8 @@ function selectedSourceProjection(tree, selected, metadataOnly = false) {
   for (const row of tree.split("\0").filter(Boolean)) {
     const tab = row.indexOf("\t"), [mode, type, oid] = row.slice(0, tab).split(" "), file = row.slice(tab + 1);
     const parent = portable(dirname(file));
-    const attributes = (file === ".gitattributes" || file.endsWith("/.gitattributes"))
-      && selected.some(id => id === "." || parent === "." || id === parent || id.startsWith(parent + "/"));
+    const attributes = file === ".gitattributes" || file.endsWith("/.gitattributes")
+      && selected.some(id => id === "." || parent === "." || id === parent || id.startsWith(parent + "/") || parent.startsWith(id + "/"));
     if (attributes) {
       if (mode !== "100644" && mode !== "100755") throw new Error("selected checkout attributes are not regular recorded source: " + file);
       patterns.push(literal(file));
@@ -455,12 +455,24 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
     else await extendLiteralProjection(root, paths.map(path => "/" + path.replace(/([*?\[\] ])/gu, "\\$1")));
   }
   const mounts = [];
+  async function selectedTree(repository, revision, paths) {
+    if (paths.includes(".")) return git(repository, "--no-lazy-fetch", "ls-tree", "-r", "-z", revision);
+    const selected = new Set([".gitmodules", ".gitattributes", ...paths]);
+    for (const path of paths) {
+      for (let parent = portable(dirname(path)); parent !== "."; parent = portable(dirname(parent))) {
+        selected.add(parent + "/.gitattributes");
+      }
+    }
+    // Authenticate the selected subtrees and their governing ancestor policy.
+    // An unrelated, unreceived tree is not required to read this source cut.
+    return git(repository, "--no-lazy-fetch", "--literal-pathspecs", "ls-tree", "-r", "-z", revision, "--", ...selected);
+  }
   async function receiveAttributes(repository, paths) {
-    const { attributes } = selectedSourceProjection(await git(repository, 'ls-tree', '-r', '-z', 'HEAD'), paths);
+    const { attributes } = selectedSourceProjection(await selectedTree(repository, "HEAD", paths), paths);
     for (const { path } of attributes) {
       const file=join(repository,path);
       await regularSourceFile(root,portable(relative(root,file)));
-      assert.deepEqual(await readFile(file),Buffer.from(await git(repository,'show','HEAD:'+path)),'Git attributes differ from committed checkout policy');
+      assert.deepEqual(await readFile(file),Buffer.from(await git(repository,'--no-lazy-fetch','show','HEAD:'+path)),'Git attributes differ from committed checkout policy');
     }
     return attributes;
   }
@@ -520,7 +532,7 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         // --filter is a request: some servers warn and send an unfiltered pack.
         // A refused partial acquisition is retained, never certified or erased.
         if ((await objects()).some(row => row.endsWith(" blob"))) throw new Error("selected source transport did not honor blob:none; preserve the unreceived carrier");
-        const { patterns, blobs: selectedBlobs } = selectedSourceProjection(await git(target, "ls-tree", "-r", "-z", match[1]), selected, metadataOnly);
+        const { patterns, blobs: selectedBlobs } = selectedSourceProjection(await selectedTree(target, match[1], selected), selected, metadataOnly);
         await git(target, "sparse-checkout", "init", "--no-cone");
         await git(target, "sparse-checkout", "set", "--no-cone", "--", ...patterns);
         await execute("git", ["-c", "protocol.file.allow=never", "-c", "core.hooksPath=/dev/null", "checkout", "-q", "--detach", match[1]], { cwd: target, environment });
@@ -540,7 +552,7 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         });
         if(sparse.trim()==="true") {
           const selected=wanted.map(id=>id===path?".":id.slice(path.length+1));
-          const { patterns } = selectedSourceProjection(await git(target, "ls-tree", "-r", "-z", match[1]), selected, metadataOnly);
+          const { patterns } = selectedSourceProjection(await selectedTree(target, match[1], selected), selected, metadataOnly);
           // Extend this recorded source owner; never repin, reset or discard
           // already received paths when a later selection needs another face.
           await extendLiteralProjection(target, patterns);
@@ -553,6 +565,25 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
       await receive(target, wanted.map((id) => id === path ? "." : id.slice(path.length + 1)));
     }
   }
+  // The workspace root importer is always in the dependency selection; it is
+  // not a request to hydrate every unrelated repository directory. Authenticate
+  // policy for the selected importers and the root's declared package carriers.
+  const rootManifestStat = await lstat(join(root, "package.json")).catch(error => {
+    if (error.code === "ENOENT") return null; throw error;
+  });
+  let rootManifest = {};
+  if (rootManifestStat !== null) {
+    await regularSourceFile(root, "package.json");
+    const rootManifestBytes = await readFile(join(root, "package.json"));
+    assert.deepEqual(rootManifestBytes, Buffer.from(await git(root, "--no-lazy-fetch", "show", "HEAD:package.json")), "root package carrier declaration differs from committed source");
+    rootManifest = JSON.parse(rootManifestBytes);
+  }
+  const rootAssets = (rootManifest.files ?? []).filter(path => typeof path === "string" && !path.startsWith("!"))
+    .map(path => path.split(/[?*[{]/u, 1)[0].replace(/\/$/u, ""));
+  for (const asset of rootAssets) {
+    if (!asset || !contained(root, resolve(root, asset))) throw new Error("root package files require bounded paths within the selected checkout");
+  }
+  await receiveAttributes(root, [...importerIds.filter(id => id !== "."), ...rootAssets]);
   await receive(root, importerIds);
   return mounts;
 }

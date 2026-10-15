@@ -148,7 +148,7 @@ export function preparePublishedSourceReceivingSync({ repository, sourceBase, ta
     if (!paths.length) return [];
     return [[], ['--cached'], ['--source=' + target]].map(selection => {
       const fields = String(gitSync(repository, ['check-attr', ...selection, '-z', '--stdin',
-        'filter', 'text', 'eol', 'working-tree-encoding'], {input: paths.join('\0') + '\0', maxBuffer: 128 * 1024})).split('\0');
+        'filter', 'text', 'eol', 'working-tree-encoding', 'ident'], {input: paths.join('\0') + '\0', maxBuffer: 128 * 1024})).split('\0');
       const profiles=new Map();
       for (let offset=0;offset+2<fields.length;offset+=3) {
         const profile=profiles.get(fields[offset])??{};
@@ -156,8 +156,10 @@ export function preparePublishedSourceReceivingSync({ repository, sourceBase, ta
       }
       for(const [path,profile] of profiles) {
         const unset=value=>['unspecified','unset'].includes(value);
-        if(!unset(profile.filter)||!unset(profile['working-tree-encoding'])
-          ||!(unset(profile.text)&&unset(profile.eol) || profile.text==='set'&&profile.eol==='lf'))
+        if(!unset(profile.filter)||!unset(profile['working-tree-encoding'])||!unset(profile.ident)
+          ||!(unset(profile.text)&&unset(profile.eol)
+            || profile.text==='set'&&profile.eol==='lf'
+            || profile.text==='auto'&&unset(profile.eol)))
           throw new TypeError('source receiving refuses unreceived checkout transformations: '+path);
       }
       return fields;
@@ -220,7 +222,8 @@ export function preparePublishedSourceReceivingSync({ repository, sourceBase, ta
   const lfPaths=new Set(attributeState.flatMap(fields=>{
     const result=[];
     for(let offset=0;offset+2<fields.length;offset+=3)
-      if(fields[offset+1]==='eol'&&fields[offset+2]==='lf')result.push(fields[offset]);
+      if(fields[offset+1]==='eol'&&fields[offset+2]==='lf'
+        || fields[offset+1]==='text'&&fields[offset+2]==='auto')result.push(fields[offset]);
     return result;
   }));
   const lfBytes=(bytes,path)=>{
@@ -228,6 +231,8 @@ export function preparePublishedSourceReceivingSync({ repository, sourceBase, ta
     new TextDecoder('utf-8',{fatal:true}).decode(bytes);
   };
   for(const row of observations)if(lfPaths.has(row.path)) {
+    // Gitlinks are index-only named commits; no child body is checked out.
+    if(row.old?.mode==='160000'&&row.incoming?.mode==='160000')continue;
     for(const entry of [row.old,row.incoming,row.staged])if(entry) {
       if(!['100644','100755'].includes(entry.mode))throw new TypeError('LF receiving requires a regular text carrier: '+row.path);
       lfBytes(gitSync(repository,['cat-file','blob',entry.object]),row.path);

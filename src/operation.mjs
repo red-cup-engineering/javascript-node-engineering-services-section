@@ -2,7 +2,7 @@ import { parseJsonValue } from "@red-cup-engineering/json-services-section/parse
 import { canonicalJson } from "@red-cup-engineering/json-services-section/canonical-json";
 import { isJsonValue } from "@red-cup-engineering/json-services-section/is-json-value";
 
-import { admit, defineType } from "@red-cup-engineering/computer-data-engineering-services-section/type-system";
+import { admit, defineType } from "@red-cup-engineering/signcell/type-system";
 
 function refusal(reason, message) {
   return Object.freeze({ ok: false, refusal: Object.freeze({ reason, message }) });

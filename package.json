@@ -1,6 +1,6 @@
 {
   "name": "@red-cup-engineering/javascript-node-services-section",
-  "version": "0.3.1-dev.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "Node.js execution of schema-bound operations and shared command transports.",
   "exports": {
@@ -63,21 +63,23 @@
     "node": ">=24.2.0"
   },
   "dependencies": {
-    "@red-cup-engineering/computer-text-content-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/json-services-section": "workspace:*",
-    "@red-cup-engineering/markdown-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/read-javascript-file-export-documentation-service": "workspace:*",
-    "@red-cup-engineering/computer-code-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/computer-data-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/node-process-services-section": "workspace:*",
-    "@red-cup-engineering/metrologic": "workspace:*",
-    "@red-cup-engineering/jsonl-services-section": "workspace:*",
-    "@red-cup-engineering/json-schema-services-section": "workspace:*",
-    "@red-cup-engineering/computer-content-engineering-services-section": "workspace:*"
+    "@red-cup-engineering/computer-text-content-engineering-services-section": "0.1.0",
+    "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "0.3.1",
+    "@red-cup-engineering/json-services-section": "0.4.0",
+    "@red-cup-engineering/markdown-engineering-services-section": "0.5.1",
+    "@red-cup-engineering/read-javascript-file-export-documentation-service": "0.1.4",
+    "@red-cup-engineering/computer-code-engineering-services-section": "0.1.0",
+    "@red-cup-engineering/computer-data-engineering-services-section": "0.2.0",
+    "@red-cup-engineering/node-process-services-section": "0.2.1",
+    "@red-cup-engineering/metrologic": "0.3.0",
+    "@red-cup-engineering/jsonl-services-section": "0.1.0",
+    "@red-cup-engineering/json-schema-services-section": "0.5.0",
+    "@red-cup-engineering/computer-content-engineering-services-section": "0.1.0",
+    "@red-cup-engineering/signcell": "0.1.0"
   },
   "devDependencies": {
-    "@red-cup-engineering/jsonl-services-section": "workspace:*",
-    "@red-cup-engineering/metrologic": "workspace:*"
-  }
+    "@red-cup-engineering/jsonl-services-section": "0.1.0",
+    "@red-cup-engineering/metrologic": "0.3.0"
+  },
+  "private": false
 }

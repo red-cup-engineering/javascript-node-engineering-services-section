@@ -1,10 +1,10 @@
-import { admit } from "@red-cup-engineering/computer-data-engineering-services-section/type-system";
+import { admit } from "@red-cup-engineering/signcell/type-system";
 import {
   TYPED_OPERATION_MESSAGE_VERSION,
   TYPED_OPERATION_REFUSAL_KIND,
   TYPED_OPERATION_RESULT_KIND,
   typedOperationRequestType,
-} from "@red-cup-engineering/computer-data-engineering-services-section/typed-operation-message";
+} from "@red-cup-engineering/signcell/typed-operation-message";
 
 const CODECS = Object.freeze({
   json: Object.freeze({

@@ -72,7 +72,9 @@
     "@red-cup-engineering/computer-data-engineering-services-section": "workspace:*",
     "@red-cup-engineering/node-process-services-section": "workspace:*",
     "@red-cup-engineering/metrologic": "workspace:*",
-    "@red-cup-engineering/jsonl-services-section": "workspace:*"
+    "@red-cup-engineering/jsonl-services-section": "workspace:*",
+    "@red-cup-engineering/json-schema-services-section": "workspace:*",
+    "@red-cup-engineering/computer-content-engineering-services-section": "workspace:*"
   },
   "devDependencies": {
     "@red-cup-engineering/jsonl-services-section": "workspace:*",

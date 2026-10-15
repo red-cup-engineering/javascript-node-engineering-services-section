@@ -1,3 +1,7 @@
+import { parseJsonValue } from "@red-cup-engineering/json-services-section/parse-json-value";
+import { resolveJsonPointer } from "@red-cup-engineering/json-services-section/resolve-json-pointer";
+import { validateJsonSchema } from "@red-cup-engineering/json-schema-services-section/validation";
+import moduleParameterizationSchema from "@red-cup-engineering/computer-content-engineering-services-section/module-parameterization-schema" with { type: "json" };
 /**
  * The code a computation runs, as one identity: the modules its entries import, followed through
  * relative paths and workspace packages, each named by its package and path within it and digested
@@ -365,4 +369,118 @@ export function moduleClosureBytes(id) {
   const bytes = Buffer.from(canonicalJson(moduleClosureMaterial(id)));
   if (byteAddress(bytes) !== id) throw new TypeError("JavaScript programme closure address mismatch");
   return bytes;
+}
+
+function moduleParameterizationShape(value, definition) {
+  const schema = { ...moduleParameterizationSchema, $ref: "#/$defs/" + definition };
+  delete schema.oneOf;
+  const judgment = validateJsonSchema(value, schema);
+  if (!judgment.valid) throw new TypeError("Invalid module parameterization " + definition + ": " + JSON.stringify(judgment.issues));
+  return value;
+}
+
+function freezeModuleParameterData(value, depth = 0) {
+  if (depth > 64) throw new RangeError("Module parameterization data exceeds depth 64");
+  if (value !== null && typeof value === "object") {
+    for (const child of Object.values(value)) freezeModuleParameterData(child, depth + 1);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function bindModuleParameterValue(value, parameters, depth = 0) {
+  if (depth > 64) throw new RangeError("Module parameterization data exceeds depth 64");
+  if (value === null || typeof value !== "object") return value;
+  if (!Array.isArray(value) && Object.hasOwn(value, "$parameter")) {
+    if (Object.keys(value).length !== 1 || typeof value.$parameter !== "string"
+      || !Object.hasOwn(parameters, value.$parameter))
+      throw new TypeError("Module parameterization has an undeclared parameter");
+    return bindModuleParameterValue(parameters[value.$parameter], Object.create(null), depth + 1);
+  }
+  return Array.isArray(value)
+    ? value.map(item => bindModuleParameterValue(item, parameters, depth + 1))
+    : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, bindModuleParameterValue(item, parameters, depth + 1)]));
+}
+
+/** Admit declaration grammar without reading data or importing any programme. */
+export function admitModuleParameterizationSources(sources) {
+  if (!Array.isArray(sources) || sources.length > 200)
+    throw new TypeError("Module parameterization requires at most 200 declared sources");
+  for (const source of sources) {
+    const judgment = validateJsonSchema(source, moduleParameterizationSchema);
+    if (!judgment.valid) throw new TypeError("Invalid module parameterization source declaration");
+  }
+  return sources;
+}
+
+/** Read and bind JSON source data only. The host imports its selected factories later.
+ * Source custody never grants effect authority. One invocation snapshots all referenced
+ * data before returning; it neither edits source nor opens a runtime programme.
+ */
+export async function readModuleParameterizations(sources, {
+  moduleBasePath, sourceDocument, readFile = file => readFileSync(file),
+} = {}) {
+  admitModuleParameterizationSources(sources);
+  const require = createRequire(moduleBasePath);
+  const document = sourceDocument === undefined ? undefined
+    : freezeModuleParameterData(structuredClone(sourceDocument));
+  const records = new Map(), digests = new Map();
+  let sourceBytes = 0;
+  const readDataRef = async reference => {
+    moduleParameterizationShape(reference, "dataRef");
+    const file = require.resolve(reference.module);
+    if (!file.endsWith(".json")) throw new TypeError("DataRef must resolve a package JSON data export");
+    if (digests.has(file) && digests.get(file) !== reference.sha256)
+      throw new TypeError("One module parameterization cannot select conflicting source digests");
+    digests.set(file, reference.sha256);
+    if (!records.has(file)) records.set(file, (async () => {
+      const bytes = await readFile(file);
+      if (!(bytes instanceof Uint8Array) || bytes.byteLength > 1024 * 1024)
+        throw new TypeError("DataRef requires at most one MiB of exact JSON source bytes");
+      sourceBytes += bytes.byteLength;
+      if (sourceBytes > 8 * 1024 * 1024) throw new RangeError("Module parameterization source exceeds eight MiB");
+      if (createHash("sha256").update(bytes).digest("hex") !== reference.sha256)
+        throw new TypeError("DataRef source digest differs");
+      return freezeModuleParameterData(parseJsonValue(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
+    })());
+    const record = await records.get(file);
+    if (record === null || typeof record !== "object" || Array.isArray(record)
+      || (record.id ?? record.$id) !== reference.record)
+      throw new TypeError("DataRef record identity differs");
+    const value = reference.pointer === undefined ? record : resolveJsonPointer(record, reference.pointer);
+    if (value === undefined) throw new TypeError("DataRef pointer is absent");
+    return value;
+  };
+  const resolved = await Promise.all(sources.map(async entry => {
+    if (!Object.hasOwn(entry, "dataRef"))
+      return { ...entry, configuration: bindModuleParameterValue(structuredClone(entry.configuration ?? {}), Object.create(null)) };
+    const descriptor = await readDataRef(entry.dataRef);
+    moduleParameterizationShape(descriptor, "descriptor");
+    const names = [...descriptor.parameters].sort(), supplied = Object.keys(entry.parameters).sort();
+    if (JSON.stringify(names) !== JSON.stringify(supplied))
+      throw new TypeError("Module parameterization must bind exactly its declared parameters");
+    if (JSON.stringify(Object.keys(descriptor.parameterSchemas).sort()) !== JSON.stringify(names))
+      throw new TypeError("Module parameterization requires one Data model for every parameter");
+    const parameters = Object.create(null);
+    await Promise.all(names.map(async name => {
+      const reference = entry.parameters[name];
+      if (Object.hasOwn(reference, "instancePointer")) {
+        moduleParameterizationShape(reference, "instancePointer");
+        if (document === undefined) throw new TypeError("Instance pointer requires the admitted source document");
+        const value = resolveJsonPointer(document, reference.instancePointer);
+        if (value === undefined) throw new TypeError("Module parameterization instance pointer is absent");
+        parameters[name] = structuredClone(value);
+      } else parameters[name] = await readDataRef(reference);
+      if (descriptor.parameterSchemas?.[name] !== undefined) {
+        const schema = await readDataRef(descriptor.parameterSchemas[name]);
+        if (!validateJsonSchema(parameters[name], schema).valid)
+          throw new TypeError("Module parameterization parameter is outside its declared Data model");
+      }
+    }));
+    const configuration = bindModuleParameterValue(descriptor.configuration, parameters);
+    if (configuration === null || typeof configuration !== "object" || Array.isArray(configuration))
+      throw new TypeError("Module parameterization configuration must resolve to an object");
+    return { module: descriptor.module, export: descriptor.export, configuration };
+  }));
+  return freezeModuleParameterData(resolved);
 }

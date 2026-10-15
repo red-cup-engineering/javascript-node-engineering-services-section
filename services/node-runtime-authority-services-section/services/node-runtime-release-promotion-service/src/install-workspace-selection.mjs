@@ -393,10 +393,10 @@ export function selectDeclaredWorkspaceClosure({ projects, importerIds, workspac
 }
 
 /** A package projection includes the recorded Git controls that govern its checkout. */
-function selectedSourceProjection(tree, selected) {
+function selectedSourceProjection(tree, selected, metadataOnly = false) {
   if (selected.some(id => /[\\\r\n\0]/u.test(id))) throw new Error("selected sparse path is not literal");
   const literal = id => "/" + id.replace(/([*?\[\] ])/gu, "\\$1");
-  const patterns = selected.includes(".") ? ["/*"] : ["/.gitmodules", ...selected.map(id => literal(id) + "/")];
+  const patterns = metadataOnly ? ["/.gitmodules"] : selected.includes(".") ? ["/*"] : ["/.gitmodules", ...selected.map(id => literal(id) + "/")];
   const blobs = new Set();
   const policies = [];
   for (const row of tree.split("\0").filter(Boolean)) {
@@ -410,13 +410,16 @@ function selectedSourceProjection(tree, selected) {
       policies.push({ path: file, gitBlob: oid });
     }
     if (mode === "160000" && selected.some(id => id === file || id.startsWith(file + "/"))) patterns.push(literal(file));
-    if (type === "blob" && (attributes || file === ".gitmodules" || selected.includes(".") || selected.some(id => file.startsWith(id + "/")))) blobs.add(oid);
+    const wanted = selected.includes(".") || selected.some(id => file.startsWith(id + "/"));
+    const manifest = file === "package.json" || file.endsWith("/package.json");
+    if (metadataOnly && wanted && manifest) patterns.push(literal(file));
+    if (type === "blob" && (attributes || file === ".gitmodules" || wanted && (!metadataOnly || manifest))) blobs.add(oid);
   }
   return { patterns: [...new Set(patterns)], blobs, attributes: policies };
 }
 
 /** Receive recorded selected Gitlinks; acquisition is allowed only during requested installation. */
-export async function receiveSelectedSources({ root, importerIds, environment, onOutput, materialize = false }) {
+export async function receiveSelectedSources({ root, importerIds, environment, onOutput, materialize = false, metadataOnly = false }) {
   const git = (cwd, ...args) => execute("git", args, { cwd, environment });
   async function extendLiteralProjection(repository, patterns) {
     const held = (await git(repository, "sparse-checkout", "list")).trim().split("\n").filter(Boolean);
@@ -435,7 +438,7 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
   const sparse = await git(root, "config", "--bool", "core.sparseCheckout").catch((error) => {
     if (error.exitCode === 1) return "false"; throw error;
   });
-  if (materialize && sparse.trim() === "true") {
+  if (materialize && !metadataOnly && sparse.trim() === "true") {
     // Root-owned instance data and agency carriers are package files too. A
     // source selection which keeps only nested importers silently drops them.
     const manifest = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
@@ -517,7 +520,7 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         // --filter is a request: some servers warn and send an unfiltered pack.
         // A refused partial acquisition is retained, never certified or erased.
         if ((await objects()).some(row => row.endsWith(" blob"))) throw new Error("selected source transport did not honor blob:none; preserve the unreceived carrier");
-        const { patterns, blobs: selectedBlobs } = selectedSourceProjection(await git(target, "ls-tree", "-r", "-z", match[1]), selected);
+        const { patterns, blobs: selectedBlobs } = selectedSourceProjection(await git(target, "ls-tree", "-r", "-z", match[1]), selected, metadataOnly);
         await git(target, "sparse-checkout", "init", "--no-cone");
         await git(target, "sparse-checkout", "set", "--no-cone", "--", ...patterns);
         await execute("git", ["-c", "protocol.file.allow=never", "-c", "core.hooksPath=/dev/null", "checkout", "-q", "--detach", match[1]], { cwd: target, environment });
@@ -537,7 +540,7 @@ export async function receiveSelectedSources({ root, importerIds, environment, o
         });
         if(sparse.trim()==="true") {
           const selected=wanted.map(id=>id===path?".":id.slice(path.length+1));
-          const { patterns } = selectedSourceProjection(await git(target, "ls-tree", "-r", "-z", match[1]), selected);
+          const { patterns } = selectedSourceProjection(await git(target, "ls-tree", "-r", "-z", match[1]), selected, metadataOnly);
           // Extend this recorded source owner; never repin, reset or discard
           // already received paths when a later selection needs another face.
           await extendLiteralProjection(target, patterns);

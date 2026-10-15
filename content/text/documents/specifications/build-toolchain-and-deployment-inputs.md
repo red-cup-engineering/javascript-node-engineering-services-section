@@ -32,7 +32,7 @@ The exact compiler must be resolved from the producing owner's installed depende
 
 ## Decision: bounded native registry metadata acquisition
 
-The separate [native registry metadata input decision](../../../../services/node-runtime-authority-services-section/services/node-runtime-release-promotion-service/content/text/documents/specifications/native-registry-metadata-inputs.md) proposes an exact PNPM 11.28.5 public API cohort in the existing release fabrication owner. This is its own capability-specific admission, not an extension of the Solidity compiler exception. It permits only existing-registry metadata reads and genuine native cache materialization during acquisition; construction remains policy-preserving and offline. The exact supplier declaration, source implementation, fresh-process material coverage and complete network-denied native production replay must receive together. No runtime use or other external capability is admitted. The root lock stays unchanged until independent review and ordinary whole-root receiving.
+The [native registry metadata input decision](../../../../services/node-runtime-authority-services-section/services/node-runtime-release-promotion-service/content/text/documents/specifications/native-registry-metadata-inputs.md) qualifies the exact PNPM 11.28.5 public API cohort in the original release fabricator solely for obtaining immutable build-time metadata. Runtime import and production-pack use are forbidden; frozen no-network receiving and installed supplier identity remain independent obligations.
 
 ## Decision: declared host/profile dependencies are used
 

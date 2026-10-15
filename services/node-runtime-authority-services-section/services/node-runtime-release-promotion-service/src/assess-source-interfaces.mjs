@@ -90,6 +90,7 @@ export async function assessSourceInterfaces({ workspace, commit, importerIds, e
   const pending = [...entries.map(file => resolve(root, file)), ...moduleContracts.map(item => item.module),...typescriptInputs], missing = [], unreceived = [], bindings = [], files = [], imports = new Map(), edges = new Map();
   for (const item of packages) {
     const observed = declaredNodeRuntimeEntries(item.root, item.manifest);
+    missing.push(...observed.unpacked.map(carrier => ({ package: item.manifest.name, ...carrier })));
     for (const carrier of [...observed.entries, ...observed.missing.map(item => item.path)]) confine(carrier);
     pending.push(...observed.entries);
     for (const carrier of observed.missing) (generatedOwner(carrier.path) ? unreceived : missing).push({ package: item.manifest.name, ...carrier, reason: generatedOwner(carrier.path) ? "published-carrier-requires-native-generation" : "absent-published-carrier" });

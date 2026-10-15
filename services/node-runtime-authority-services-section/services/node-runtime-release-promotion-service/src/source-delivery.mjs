@@ -149,9 +149,17 @@ export function preparePublishedSourceReceivingSync({ repository, sourceBase, ta
     return [[], ['--cached'], ['--source=' + target]].map(selection => {
       const fields = String(gitSync(repository, ['check-attr', ...selection, '-z', '--stdin',
         'filter', 'text', 'eol', 'working-tree-encoding'], {input: paths.join('\0') + '\0', maxBuffer: 128 * 1024})).split('\0');
-      for (let offset = 0; offset + 2 < fields.length; offset += 3)
-        if (!['unspecified', 'unset'].includes(fields[offset + 2]))
-          throw new TypeError('source receiving refuses checkout transformations: ' + fields[offset] + ' ' + fields[offset + 1]);
+      const profiles=new Map();
+      for (let offset=0;offset+2<fields.length;offset+=3) {
+        const profile=profiles.get(fields[offset])??{};
+        profile[fields[offset+1]]=fields[offset+2];profiles.set(fields[offset],profile);
+      }
+      for(const [path,profile] of profiles) {
+        const unset=value=>['unspecified','unset'].includes(value);
+        if(!unset(profile.filter)||!unset(profile['working-tree-encoding'])
+          ||!(unset(profile.text)&&unset(profile.eol) || profile.text==='set'&&profile.eol==='lf'))
+          throw new TypeError('source receiving refuses unreceived checkout transformations: '+path);
+      }
       return fields;
     });
   };
@@ -207,6 +215,28 @@ export function preparePublishedSourceReceivingSync({ repository, sourceBase, ta
     } else if (!admitted(held)) throw new TypeError('unique working source needs composition: ' + path);
     return {path, old, incoming, held, staged};
   });
+  // The selected LF profile is admitted only when every relevant existing
+  // byte carrier is already LF text. A text attribute alone is no byte proof.
+  const lfPaths=new Set(attributeState.flatMap(fields=>{
+    const result=[];
+    for(let offset=0;offset+2<fields.length;offset+=3)
+      if(fields[offset+1]==='eol'&&fields[offset+2]==='lf')result.push(fields[offset]);
+    return result;
+  }));
+  const lfBytes=(bytes,path)=>{
+    if(bytes.includes(13)||bytes.includes(0))throw new TypeError('LF receiving requires existing LF text: '+path);
+    new TextDecoder('utf-8',{fatal:true}).decode(bytes);
+  };
+  for(const row of observations)if(lfPaths.has(row.path)) {
+    for(const entry of [row.old,row.incoming,row.staged])if(entry) {
+      if(!['100644','100755'].includes(entry.mode))throw new TypeError('LF receiving requires a regular text carrier: '+row.path);
+      lfBytes(gitSync(repository,['cat-file','blob',entry.object]),row.path);
+    }
+    if(row.held) {
+      if(!['100644','100755'].includes(row.held.mode))throw new TypeError('LF receiving requires a regular held text carrier: '+row.path);
+      lfBytes(readFileSync(join(repository,row.path)),row.path);
+    }
+  }
   if (head() !== sourceBase) throw new TypeError('source receiving HEAD differs from original source');
   const summary = Object.freeze({sourceBase, target, remote, ref, paths: Object.freeze([...paths]),
     gitlinks: Object.freeze(observations.filter(row => row.incoming?.mode === '160000').map(row => row.path))});
@@ -218,7 +248,7 @@ export function preparePublishedSourceReceivingSync({ repository, sourceBase, ta
       throw new TypeError('source receiving carrier changed before mutation: ' + row.path);
     const restore = (selected, working) => {
       if (!selected.length) return;
-      gitSync(repository, ['-c', 'submodule.recurse=false', '-c', 'core.autocrlf=false', 'restore', '--source=' + target, '--staged',
+      gitSync(repository, ['-c', 'submodule.recurse=false', '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'restore', '--source=' + target, '--staged',
         ...(working ? ['--worktree'] : []), '--pathspec-from-file=-', '--pathspec-file-nul'],
       {input: selected.join('\0') + '\0', env: {GIT_LITERAL_PATHSPECS: '1'}});
     };

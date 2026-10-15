@@ -19,7 +19,8 @@ import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export const LOCKFILE = "pnpm-lock.yaml";
-const ROOT_FILES = new Set(["package.json", LOCKFILE, "pnpm-workspace.yaml", ".npmrc"]);
+const PACKAGE_MANIFESTS = ["package.json", "package.json5", "package.yaml"];
+const ROOT_FILES = new Set([...PACKAGE_MANIFESTS, LOCKFILE, "pnpm-workspace.yaml", ".npmrc"]);
 
 const gitSync = (gitDir, ...args) => {
   const options = args.at(-1) && typeof args.at(-1) === "object" ? args.pop() : {};
@@ -42,28 +43,42 @@ function submoduleNames(gitDir, commit) {
   return names;
 }
 
-/** Read the package directories admitted by the root's committed pnpm workspace patterns. */
+/** Read and normalize pnpm 11.28.5's workspace package-pattern contract. */
 function workspacePatterns(gitDir, commit) {
   const object = gitSync(gitDir, "rev-parse", "--verify", `${commit}:pnpm-workspace.yaml`).toString().trim();
-  const bytes = gitSync(gitDir, "cat-file", "blob", object).toString();
-  const workspace = parseYaml(bytes);
-  const patterns = workspace?.packages ?? ["."];
-  if (!Array.isArray(patterns) || patterns.some((pattern) => typeof pattern !== "string" || !pattern.trim())) {
+  const workspace = parseYaml(gitSync(gitDir, "cat-file", "blob", object).toString());
+  const declared = workspace?.packages ?? ["."];
+  if (!Array.isArray(declared) || declared.some((pattern) => typeof pattern !== "string" || !pattern.trim())) {
     throw new Error("pnpm workspace packages must be a list of nonempty glob patterns");
   }
-  const includes = patterns.filter((pattern) => !pattern.startsWith("!"));
-  const excludes = patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => pattern.slice(1));
-  const roots = includes.map((pattern) => micromatch.scan(pattern).base).filter(Boolean);
-  const unbounded = patterns.length > 0 && (!includes.length || includes.some((pattern) => !micromatch.scan(pattern).base));
-  const subtreeExcludes = excludes.filter((pattern) => pattern.endsWith("/**"));
-  const admitted = (directory) => micromatch.isMatch(directory, patterns, { dot: true });
+  const normalize = (pattern) => {
+    const negative = pattern.startsWith("!") && pattern[1] !== "(";
+    const value = negative ? pattern.slice(1) : pattern;
+    if (!value || value.startsWith("/") || /^[A-Za-z]:\//u.test(value) || /(^|\/)\.\.(?:\/|$)/u.test(value) || value.includes("\\")) {
+      throw new Error(`workspace package pattern escapes or leaves the committed repository scope: ${pattern}`);
+    }
+    const directoryPattern = value.replace(/\/+$/u, "");
+    const rootOnly = directoryPattern === "." || directoryPattern === "";
+    const normalized = `${directoryPattern.replace(/\/{2,}/gu, "/")}/package.{json,yaml,json5}`.replace(/^(?:\.\/)+/u, "");
+    return { pattern: `${negative ? "!" : ""}${normalized}`, negative, rootOnly, directoryPattern };
+  };
+  const entries = declared.map(normalize);
+  const positive = entries.filter((entry) => !entry.negative && !entry.rootOnly).map((entry) => entry.pattern);
+  const negative = entries.filter((entry) => entry.negative).map((entry) => entry.pattern.slice(1));
+  const bases = positive.map((pattern) => micromatch.scan(pattern).base);
+  const roots = bases.filter((base) => Boolean(base) && base !== ".");
+  const unbounded = bases.some((base) => !base || base === ".");
+  const subtreeExcludes = entries.filter((entry) => entry.negative && entry.directoryPattern.endsWith("/**")).map((entry) => entry.pattern.slice(1));
+  const matches = (paths, patterns, options) => patterns.length > 0 && micromatch(paths, patterns, options).length > 0;
+  const manifestPaths = (directory) => PACKAGE_MANIFESTS.map((name) => directory ? `${directory}/${name}` : name);
+  const admitted = (directory) => matches(manifestPaths(directory), positive, { dot: false }) && !matches(manifestPaths(directory), negative, { dot: true });
   const canContain = (directory) => {
-    if (micromatch.isMatch(directory, subtreeExcludes, { dot: true })) return false;
+    if (matches(manifestPaths(directory), subtreeExcludes, { dot: true })) return false;
     if (admitted(directory)) return true;
     if (unbounded) return true;
     return roots.some((root) => root === directory || root.startsWith(`${directory}/`) || directory.startsWith(`${root}/`));
   };
-  return { patterns, includes, excludes, admitted, canContain };
+  return { positive, negative, admitted, canContain };
 }
 
 /** Read many tree objects in one Git process and decode their immediate entries. */
@@ -122,8 +137,8 @@ export function workspaceManifestEntries(gitDir, commit, { rootFiles = ROOT_FILE
             gitSync(moduleDir, "fetch", "--quiet", "origin", object);
           }
           found.push(...workspaceManifestEntries(moduleDir, object, { rootFiles, prefix: `${workspacePath}/`, fetchMissing, patterns: workspace }));
-        } else if (name === "package.json" || (!prefix && !directory && rootFiles.has(localPath))) {
-          const packageDirectory = name === "package.json" ? `${prefix}${directory}`.replace(/\/$/u, "") : "";
+        } else if (PACKAGE_MANIFESTS.includes(name) || (!prefix && !directory && rootFiles.has(localPath))) {
+          const packageDirectory = PACKAGE_MANIFESTS.includes(name) ? `${prefix}${directory}`.replace(/\/$/u, "") : "";
           const rootInput = !prefix && !directory && rootFiles.has(localPath);
           if (!rootInput && !workspace.admitted(packageDirectory)) continue;
           if (mode !== "100644" && mode !== "100755") throw new Error(`workspace input is not a regular source file: ${workspacePath}`);
@@ -181,9 +196,8 @@ export function planWorkspaceLockfile({ repository, commit = "HEAD", fetchMissin
   }
   const entries = workspaceManifestEntries(gitDir, source, { fetchMissing }).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   const inputs = entries.map(({ path, object }) => ({ path, object }));
-  for (const required of ["package.json", "pnpm-workspace.yaml"]) {
-    if (!inputs.some(({ path }) => path === required)) throw new Error(`workspace source is missing ${required}`);
-  }
+  if (!inputs.some(({ path }) => PACKAGE_MANIFESTS.includes(path))) throw new Error("workspace source is missing its root package manifest");
+  if (!inputs.some(({ path }) => path === "pnpm-workspace.yaml")) throw new Error("workspace source is missing pnpm-workspace.yaml");
   return { repository: realpathSync(repository), commit: source, gitDir, entries, inputs };
 }
 

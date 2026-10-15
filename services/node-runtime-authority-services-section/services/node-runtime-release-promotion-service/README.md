@@ -119,6 +119,46 @@ own construction and production generation changes. The older selected-install
 utilities are outside this production route and must not be used to recreate
 its source or lock authority.
 
+### Receive manifest changes before source integration
+
+`qualify-workspace-lockfile --repository <checkout> --commit <source> --spec-in-commit <release-spec> --state-dir <outside-source>`
+uses the existing committed-manifest owner. It reads the source's release declaration,
+derives the complete workspace lock with that declaration's package-manager command,
+then runs its frozen install step with `--lockfile-only --ignore-scripts` against
+the exact derived lock and unchanged manifest projection. Only the frozen-received
+bytes can enter `deriveIntegration`. The package manager still owns dependency
+resolution and its policies. A source hook that the manifest projection cannot carry
+is refused. No hand-authored lock patch is treated as a received resolution.
+
+`--plan-only` lists the immutable source manifest/blob identities without
+bootstrapping packages, checking out bodies, fetching missing mounts or running
+the resolver. Missing local source objects are an explicit obstruction. Qualification
+retains the existing owner's missing-object fetch behavior; it does not initialize
+unrelated runtime checkouts or execute application source.
+
+The integration queue automatically supplies the real release install declaration
+and keeps derived candidates in its existing queue state. The CLI retains them in
+the explicit external state directory. A retry after a receiving failure reuses
+the identity-bound derived lock, but always repeats frozen receiving in a fresh
+source projection. Different source inputs, command arguments or executable/explicit
+JavaScript entry bytes select a different artifact; modified retained bytes,
+redirected files, changed source inputs and a competing qualification lease are
+refused. Retained candidate metadata is derived cache evidence, never authority or
+acceptance. The same kernel-flock lifetime used by release promotion releases the
+lease when the controller dies. A busy/lost lease or signaled process leaves source
+work pending, rather than refusing its candidate. Atomic single-record cache
+publication cannot expose mismatched lock/input pairs. `--rederive` explicitly
+re-resolves after changed external configuration or a repaired supplier; changing
+the executable bytes also invalidates reuse automatically. The operation accepts
+explicit argument arrays or simple quoted invocations, and refuses shell control
+operators/expansions instead of interpreting a fragment of a release command.
+
+The CLI returns the artifact path; its `pnpm-lock.yaml` remains outside source.
+Publishing it still uses the existing source-transformation and independent
+receiving route. This receives the dependency derivation only. Full selected
+installation, LAGOON assembly, Guix build and runtime receiving remain their own
+actual operations and must consume the reviewed source change.
+
 ## Independently scoped source receiving
 
 A source delivery declares the original `sourceBase` of its entire intended

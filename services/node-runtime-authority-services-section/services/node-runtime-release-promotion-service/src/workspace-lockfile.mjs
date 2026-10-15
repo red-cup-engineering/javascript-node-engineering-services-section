@@ -11,14 +11,21 @@
  */
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import micromatch from "micromatch";
+import { parse as parseYaml } from "yaml";
+import { takeBatchRecord } from "@red-cup-engineering/git-services-section/git-command-codec";
 import { accessSync, constants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 export const LOCKFILE = "pnpm-lock.yaml";
-const ROOT_FILES = new Set(["package.json", LOCKFILE, "pnpm-workspace.yaml", ".npmrc"]);
+const PACKAGE_MANIFESTS = ["package.json", "package.json5", "package.yaml"];
+const ROOT_FILES = new Set([...PACKAGE_MANIFESTS, LOCKFILE, "pnpm-workspace.yaml", ".npmrc"]);
 
-const gitSync = (gitDir, ...args) => execFileSync("git", [`--git-dir=${gitDir}`, ...args], { maxBuffer: 1 << 28, stdio: ["ignore", "pipe", "pipe"] });
+const gitSync = (gitDir, ...args) => {
+  const options = args.at(-1) && typeof args.at(-1) === "object" ? args.pop() : {};
+  return execFileSync("git", ["-C", tmpdir(), `--git-dir=${gitDir}`, "--no-replace-objects", ...args], { ...options, env: { ...process.env, GIT_NO_REPLACE_OBJECTS: "1", ...options.env }, maxBuffer: 1 << 28, stdio: options.input === undefined ? ["ignore", "pipe", "pipe"] : ["pipe", "pipe", "pipe"] });
+};
 
 /** The commit's submodule names by path, from its .gitmodules (a module's gitdir is named for it). */
 function submoduleNames(gitDir, commit) {
@@ -36,31 +43,110 @@ function submoduleNames(gitDir, commit) {
   return names;
 }
 
+/** Read and normalize pnpm 11.28.5's workspace package-pattern contract. */
+function workspacePatterns(gitDir, commit) {
+  const object = gitSync(gitDir, "rev-parse", "--verify", `${commit}:pnpm-workspace.yaml`).toString().trim();
+  const workspace = parseYaml(gitSync(gitDir, "cat-file", "blob", object).toString());
+  const declared = workspace?.packages ?? ["."];
+  if (!Array.isArray(declared) || declared.some((pattern) => typeof pattern !== "string" || !pattern.trim())) {
+    throw new Error("pnpm workspace packages must be a list of nonempty glob patterns");
+  }
+  const normalize = (pattern) => {
+    const negative = pattern.startsWith("!") && pattern[1] !== "(";
+    const value = negative ? pattern.slice(1) : pattern;
+    if (!value || value.startsWith("/") || /^[A-Za-z]:\//u.test(value) || /(^|\/)\.\.(?:\/|$)/u.test(value) || value.includes("\\")) {
+      throw new Error(`workspace package pattern escapes or leaves the committed repository scope: ${pattern}`);
+    }
+    const directoryPattern = value.replace(/\/+$/u, "");
+    const rootOnly = directoryPattern === "." || directoryPattern === "";
+    const normalized = `${directoryPattern.replace(/\/{2,}/gu, "/")}/package.{json,yaml,json5}`.replace(/^(?:\.\/)+/u, "");
+    return { pattern: `${negative ? "!" : ""}${normalized}`, negative, rootOnly, directoryPattern };
+  };
+  const entries = declared.map(normalize);
+  const positive = entries.filter((entry) => !entry.negative && !entry.rootOnly).map((entry) => entry.pattern);
+  const negative = entries.filter((entry) => entry.negative).map((entry) => entry.pattern.slice(1));
+  const bases = positive.map((pattern) => micromatch.scan(pattern).base);
+  const roots = bases.filter((base) => Boolean(base) && base !== ".");
+  const unbounded = bases.some((base) => !base || base === ".");
+  const subtreeExcludes = entries.filter((entry) => entry.negative && entry.directoryPattern.endsWith("/**")).map((entry) => entry.pattern.slice(1));
+  const matches = (paths, patterns, options) => patterns.length > 0 && micromatch(paths, patterns, options).length > 0;
+  const manifestPaths = (directory) => PACKAGE_MANIFESTS.map((name) => directory ? `${directory}/${name}` : name);
+  const admitted = (directory) => matches(manifestPaths(directory), positive, { dot: false }) && !matches(manifestPaths(directory), negative, { dot: true });
+  const canContain = (directory) => {
+    if (matches(manifestPaths(directory), subtreeExcludes, { dot: true })) return false;
+    if (admitted(directory)) return true;
+    if (unbounded) return true;
+    return roots.some((root) => root === directory || root.startsWith(`${directory}/`) || directory.startsWith(`${root}/`));
+  };
+  return { positive, negative, admitted, canContain };
+}
+
+/** Read many tree objects in one Git process and decode their immediate entries. */
+function readTrees(gitDir, trees) {
+  if (!trees.length) return [];
+  const batch = gitSync(gitDir, "cat-file", "--batch", { input: trees.map(({ object }) => object).join("\n") + "\n" });
+  let remaining = batch;
+  return trees.map(({ object, directory }) => {
+    const record = takeBatchRecord(remaining);
+    if (!record) throw new Error(`workspace tree record is incomplete: ${object}`);
+    if (record.object !== object || record.type !== "tree") throw new Error(`workspace tree is unreadable: ${object}`);
+    const body = record.body, entries = [];
+    for (let cursor = 0; cursor < body.length;) {
+      const modeEnd = body.indexOf(32, cursor), nameEnd = body.indexOf(0, modeEnd + 1);
+      if (modeEnd < 0 || nameEnd < 0 || nameEnd + 21 > body.length) throw new Error(`workspace tree entry is malformed: ${object}`);
+      const mode = body.subarray(cursor, modeEnd).toString();
+      const name = body.subarray(modeEnd + 1, nameEnd).toString();
+      const child = body.subarray(nameEnd + 1, nameEnd + 21).toString("hex");
+      entries.push({ mode, name, object: child });
+      cursor = nameEnd + 21;
+    }
+    remaining = record.rest;
+    return { directory, entries };
+  });
+}
+
 /**
- * The commit's workspace manifests (and its submodules', recursively) as `{ gitDir, path, object }`:
- * every package.json, and at the root the files the package manager reads. Only trees are walked,
- * so naming them reads no file; a submodule's missing objects are fetched.
+ * The commit's actual pnpm workspace inputs as `{ gitDir, path, object }`. Tree objects are read
+ * in depth batches; directories outside the committed package globs and nested excluded regions
+ * are never descended. Gitlinks are followed only when their mounted path can contain a member.
  */
-export function workspaceManifestEntries(gitDir, commit, { rootFiles = ROOT_FILES, prefix = "", fetchMissing = true } = {}) {
+export function workspaceManifestEntries(gitDir, commit, { rootFiles = ROOT_FILES, prefix = "", fetchMissing = true, patterns } = {}) {
+  const workspace = patterns ?? (!prefix ? workspacePatterns(gitDir, commit) : undefined);
+  if (!workspace) throw new Error("nested workspace traversal requires the root's committed package patterns");
   const names = submoduleNames(gitDir, commit);
   const found = [];
-  for (const entry of gitSync(gitDir, "ls-tree", "-r", "-z", commit).toString().split("\0").filter(Boolean)) {
-    const tab = entry.indexOf("\t"), meta = entry.slice(0, tab), path = entry.slice(tab + 1);
-    const [mode, type, object] = meta.split(" ");
-    if (type === "commit") {
-      const moduleDir = join(gitDir, "modules", names.get(path) ?? path);
-      if (!within(resolve(gitDir, "modules"), resolve(moduleDir))) throw new Error(`workspace mount name escapes its repository: ${prefix}${path}`);
-      try { gitSync(moduleDir, "cat-file", "-e", `${object}^{commit}`); }
-      catch (cause) {
-        if (!fetchMissing) throw new Error(`workspace manifest source is not locally available: ${prefix}${path}@${object}`, { cause });
-        gitSync(moduleDir, "fetch", "--quiet", "origin", object);
+  const rootTree = gitSync(gitDir, "rev-parse", "--verify", `${commit}^{tree}`).toString().trim();
+  let pending = [{ object: rootTree, directory: "" }];
+  while (pending.length) {
+    const next = [];
+    for (const { directory, entries } of readTrees(gitDir, pending)) {
+      for (const { mode, name, object } of entries) {
+        const localPath = directory ? `${directory}/${name}` : name;
+        const workspacePath = `${prefix}${localPath}`;
+        if (mode === "40000" || mode === "040000") {
+          if (workspace.canContain(workspacePath)) next.push({ object, directory: localPath });
+        } else if (mode === "160000") {
+          if (!workspace.canContain(workspacePath)) continue;
+          const moduleName = names.get(localPath);
+          if (!moduleName) throw new Error(`workspace gitlink has no committed .gitmodules entry: ${workspacePath}`);
+          const moduleDir = join(gitDir, "modules", moduleName);
+          if (!within(resolve(gitDir, "modules"), resolve(moduleDir))) throw new Error(`workspace mount name escapes its repository: ${workspacePath}`);
+          try { gitSync(moduleDir, "cat-file", "-e", `${object}^{commit}`); }
+          catch (cause) {
+            if (!fetchMissing) throw new Error(`workspace manifest source is not locally available: ${workspacePath}@${object}`, { cause });
+            gitSync(moduleDir, "fetch", "--quiet", "origin", object);
+          }
+          found.push(...workspaceManifestEntries(moduleDir, object, { rootFiles, prefix: `${workspacePath}/`, fetchMissing, patterns: workspace }));
+        } else if (PACKAGE_MANIFESTS.includes(name) || (!prefix && !directory && rootFiles.has(localPath))) {
+          const packageDirectory = PACKAGE_MANIFESTS.includes(name) ? `${prefix}${directory}`.replace(/\/$/u, "") : "";
+          const rootInput = !prefix && !directory && rootFiles.has(localPath);
+          if (!rootInput && !workspace.admitted(packageDirectory)) continue;
+          if (mode !== "100644" && mode !== "100755") throw new Error(`workspace input is not a regular source file: ${workspacePath}`);
+          found.push({ gitDir, path: workspacePath, object });
+        }
       }
-      found.push(...workspaceManifestEntries(moduleDir, object, { rootFiles, prefix: `${prefix}${path}/`, fetchMissing }));
-    } else if (type === "blob" && (path === "package.json" || path.endsWith("/package.json") || (!prefix && rootFiles.has(path)))) {
-      // A submodule's own package.json sits at its root, where its path has no directory.
-      if (mode !== "100644" && mode !== "100755") throw new Error(`workspace input is not a regular source file: ${prefix}${path}`);
-      found.push({ gitDir, path: `${prefix}${path}`, object });
     }
+    pending = next;
   }
   return found;
 }
@@ -71,8 +157,8 @@ export function extractWorkspaceManifests(gitDir, commit, out, { entries = works
   for (const entry of entries) byRepository.set(entry.gitDir, [...(byRepository.get(entry.gitDir) ?? []), entry]);
   for (const [repository, blobs] of byRepository) {
     // One cat-file for the lot: each record is "<oid> blob <size>\n<bytes>\n".
-    const batch = execFileSync("git", [`--git-dir=${repository}`, "cat-file", "--batch"], {
-      input: blobs.map(({ object }) => object).join("\n") + "\n", maxBuffer: 1 << 28,
+    const batch = execFileSync("git", ["-C", tmpdir(), `--git-dir=${repository}`, "--no-replace-objects", "cat-file", "--batch"], {
+      env: { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" }, input: blobs.map(({ object }) => object).join("\n") + "\n", maxBuffer: 1 << 28,
     });
     let offset = 0;
     for (const { path, object } of blobs) {
@@ -90,7 +176,7 @@ export function extractWorkspaceManifests(gitDir, commit, out, { entries = works
 
 // Submodule repositories belong to this worktree. The shared common directory
 // holds root objects, but not the linked worktree’s initialized modules.
-const gitDirOf = (repository) => execFileSync("git", ["rev-parse", "--absolute-git-dir"], { cwd: repository }).toString().trim();
+const gitDirOf = (repository) => execFileSync("git", ["-C", repository, "--no-replace-objects", "rev-parse", "--absolute-git-dir"], { env: { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" } }).toString().trim();
 // What the package manager said about its refusal, without the cyclic-workspace warning that
 // leads every run of this workspace.
 const saidOf = (output) => output.split("\n").filter((line) => line.trim() && !/cyclic workspace/iu.test(line)).slice(-24).join("\n");
@@ -110,9 +196,8 @@ export function planWorkspaceLockfile({ repository, commit = "HEAD", fetchMissin
   }
   const entries = workspaceManifestEntries(gitDir, source, { fetchMissing }).sort((a, b) => a.path < b.path ? -1 : a.path > b.path ? 1 : 0);
   const inputs = entries.map(({ path, object }) => ({ path, object }));
-  for (const required of ["package.json", "pnpm-workspace.yaml"]) {
-    if (!inputs.some(({ path }) => path === required)) throw new Error(`workspace source is missing ${required}`);
-  }
+  if (!inputs.some(({ path }) => PACKAGE_MANIFESTS.includes(path))) throw new Error("workspace source is missing its root package manifest");
+  if (!inputs.some(({ path }) => path === "pnpm-workspace.yaml")) throw new Error("workspace source is missing pnpm-workspace.yaml");
   return { repository: realpathSync(repository), commit: source, gitDir, entries, inputs };
 }
 

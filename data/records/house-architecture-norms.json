@@ -50,10 +50,10 @@
       "kind": "dist-present"
     },
     {
-      "id": "no-lockfiles",
-      "statement": "One codebase, no per-package node_modules and no package-lock.json, pnpm-lock.yaml, or yarn.lock checked in beside the manifest.",
+      "id": "source-composition-locks",
+      "statement": "Independently owned source packages compose through ordinary native workspaces. Each selected release binds exact repository commits and package paths, genuine complete authored source and manifests, its native workspace configuration and lock, the full declared supplier closure for its receiving purpose, and separately observed frozen receiving. Generated node_modules is an installation product, not authored source. An unbound local dependency or unrelated competing lock remains a deviation. Registry-published artifacts retain exact release and publication requirements; source receiving does not require registry publication.",
       "audit": "lib/emsenn/services/561-group/services/engineering-services-section/services/computer-engineering-services-section/services/computer-code-engineering-services-section/services/javascript-engineering-services-section/services/javascript-normalization-services-section/scripts/review-jsnode-package.mjs#lockfilePresentDeviations",
-      "kind": "lockfile-present"
+      "kind": ["lockfile-present", "source-workspace-unreceived"]
     },
     {
       "id": "exports-resolve",

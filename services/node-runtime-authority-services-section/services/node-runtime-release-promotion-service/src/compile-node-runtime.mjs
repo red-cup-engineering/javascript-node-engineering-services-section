@@ -15,6 +15,7 @@ export async function compileNodeRuntime({ entries: requestedEntries = [], works
   if (!Array.isArray(requestedEntries) || requestedEntries.some(entry => typeof entry !== "string" || !entry)) {
     throw new TypeError("explicit source entries must be nonempty paths");
   }
+  if (filter !== undefined && workspace === undefined) throw new TypeError("a native workspace filter requires its source workspace");
   const entries = [...requestedEntries];
   const runtime = runtimePath === undefined ? undefined : resolve(runtimePath);
   if (!Array.isArray(jobDirectories) || jobDirectories.some(path => typeof path !== "string" || !path)) throw new TypeError("job directories must be nonempty paths");

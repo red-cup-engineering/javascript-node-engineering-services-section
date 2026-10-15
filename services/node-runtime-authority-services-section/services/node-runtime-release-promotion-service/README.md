@@ -90,6 +90,10 @@ The existing Code command entrances take the real source root directly:
 - `compile-node-runtime --workspace ROOT [--pnpm EXECUTABLE] [--runtime OUTPUT] [--entry MODULE...]`
 - `assess-node-runtime-source --workspace ROOT [--pnpm EXECUTABLE] [--entry MODULE...]`
 
+When the caller selects a consumer with a native PNPM dependency filter, source
+assessment, generation and packed compilation receive that same `--filter`.
+They retain the recorded recursive workspace and authoritative root lock.
+
 PNPM supplies the complete workspace inventory with its native recursive list.
 The source reader checks the committed root and recursive Gitlink topology,
 including staged pins and changes to `.gitmodules`, before consuming sources.

@@ -1,0 +1,10 @@
+# Source-only native registry metadata acquisition. Keep existing runtime payload
+# selection unchanged; this package previously had no root ignore file.
+/src/native-registry-metadata-contract.mjs
+/src/native-registry-metadata-provider.mjs
+/src/native-registry-metadata-input.mjs
+/scripts/acquire-registry-metadata.mjs
+/data/records/native-registry-metadata-suppliers.json
+/test/native-registry-metadata-contract.test.mjs
+/test/native-registry-metadata-native.test.mjs
+/test/fixtures/native-registry-metadata-pass.mjs

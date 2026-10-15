@@ -38,13 +38,15 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "esbuild": "0.28.1",
     "@red-cup-engineering/computer-content-address-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/node-job-service": "workspace:*",
     "@red-cup-engineering/git-services-section": "workspace:*",
-    "@red-cup-engineering/javascript-node-services-section": "workspace:*",
     "@red-cup-engineering/javascript-computer": "workspace:*",
-    "typescript": "5.9.3"
+    "@red-cup-engineering/javascript-node-services-section": "workspace:*",
+    "@red-cup-engineering/node-job-service": "workspace:*",
+    "esbuild": "0.28.1",
+    "micromatch": "4.0.8",
+    "typescript": "5.9.3",
+    "yaml": "2.9.1"
   },
   "engines": {
     "node": ">=22.18"

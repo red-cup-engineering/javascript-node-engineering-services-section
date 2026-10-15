@@ -13,6 +13,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import micromatch from "micromatch";
 import { parse as parseYaml } from "yaml";
+import { takeBatchRecord } from "@red-cup-engineering/git-services-section/git-command-codec";
 import { accessSync, constants, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -46,34 +47,35 @@ function workspacePatterns(gitDir, commit) {
   const object = gitSync(gitDir, "rev-parse", "--verify", `${commit}:pnpm-workspace.yaml`).toString().trim();
   const bytes = gitSync(gitDir, "cat-file", "blob", object).toString();
   const workspace = parseYaml(bytes);
-  if (!workspace || !Array.isArray(workspace.packages) || workspace.packages.some((pattern) => typeof pattern !== "string" || !pattern.trim())) {
-    throw new Error("pnpm workspace source must declare a nonempty package-pattern list");
+  const patterns = workspace?.packages ?? ["."];
+  if (!Array.isArray(patterns) || patterns.some((pattern) => typeof pattern !== "string" || !pattern.trim())) {
+    throw new Error("pnpm workspace packages must be a list of nonempty glob patterns");
   }
-  const includes = workspace.packages.filter((pattern) => !pattern.startsWith("!"));
-  const excludes = workspace.packages.filter((pattern) => pattern.startsWith("!")).map((pattern) => pattern.slice(1));
-  if (!includes.length) throw new Error("pnpm workspace has no included package patterns");
+  const includes = patterns.filter((pattern) => !pattern.startsWith("!"));
+  const excludes = patterns.filter((pattern) => pattern.startsWith("!")).map((pattern) => pattern.slice(1));
   const roots = includes.map((pattern) => micromatch.scan(pattern).base).filter(Boolean);
-  const admitted = (directory) => micromatch.isMatch(directory, includes, { dot: true }) && !micromatch.isMatch(directory, excludes, { dot: true });
+  const unbounded = patterns.length > 0 && (!includes.length || includes.some((pattern) => !micromatch.scan(pattern).base));
+  const subtreeExcludes = excludes.filter((pattern) => pattern.endsWith("/**"));
+  const admitted = (directory) => micromatch.isMatch(directory, patterns, { dot: true });
   const canContain = (directory) => {
+    if (micromatch.isMatch(directory, subtreeExcludes, { dot: true })) return false;
     if (admitted(directory)) return true;
-    if (micromatch.isMatch(directory, excludes, { dot: true })) return false;
+    if (unbounded) return true;
     return roots.some((root) => root === directory || root.startsWith(`${directory}/`) || directory.startsWith(`${root}/`));
   };
-  return { includes, excludes, admitted, canContain };
+  return { patterns, includes, excludes, admitted, canContain };
 }
 
 /** Read many tree objects in one Git process and decode their immediate entries. */
 function readTrees(gitDir, trees) {
   if (!trees.length) return [];
   const batch = gitSync(gitDir, "cat-file", "--batch", { input: trees.map(({ object }) => object).join("\n") + "\n" });
-  let offset = 0;
+  let remaining = batch;
   return trees.map(({ object, directory }) => {
-    const headerEnd = batch.indexOf(10, offset);
-    if (headerEnd < 0) throw new Error(`workspace tree header is missing: ${object}`);
-    const [actual, type, length] = batch.subarray(offset, headerEnd).toString().split(" ");
-    const size = Number(length), bodyStart = headerEnd + 1, bodyEnd = bodyStart + size;
-    if (actual !== object || type !== "tree" || !Number.isSafeInteger(size) || size < 0 || bodyEnd >= batch.length || batch[bodyEnd] !== 10) throw new Error(`workspace tree is unreadable: ${object}`);
-    const body = batch.subarray(bodyStart, bodyEnd), entries = [];
+    const record = takeBatchRecord(remaining);
+    if (!record) throw new Error(`workspace tree record is incomplete: ${object}`);
+    if (record.object !== object || record.type !== "tree") throw new Error(`workspace tree is unreadable: ${object}`);
+    const body = record.body, entries = [];
     for (let cursor = 0; cursor < body.length;) {
       const modeEnd = body.indexOf(32, cursor), nameEnd = body.indexOf(0, modeEnd + 1);
       if (modeEnd < 0 || nameEnd < 0 || nameEnd + 21 > body.length) throw new Error(`workspace tree entry is malformed: ${object}`);
@@ -83,7 +85,7 @@ function readTrees(gitDir, trees) {
       entries.push({ mode, name, object: child });
       cursor = nameEnd + 21;
     }
-    offset = bodyEnd + 1;
+    remaining = record.rest;
     return { directory, entries };
   });
 }
@@ -140,8 +142,8 @@ export function extractWorkspaceManifests(gitDir, commit, out, { entries = works
   for (const entry of entries) byRepository.set(entry.gitDir, [...(byRepository.get(entry.gitDir) ?? []), entry]);
   for (const [repository, blobs] of byRepository) {
     // One cat-file for the lot: each record is "<oid> blob <size>\n<bytes>\n".
-    const batch = execFileSync("git", [`--git-dir=${repository}`, "cat-file", "--batch"], {
-      input: blobs.map(({ object }) => object).join("\n") + "\n", maxBuffer: 1 << 28,
+    const batch = execFileSync("git", ["-C", tmpdir(), `--git-dir=${repository}`, "--no-replace-objects", "cat-file", "--batch"], {
+      env: { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" }, input: blobs.map(({ object }) => object).join("\n") + "\n", maxBuffer: 1 << 28,
     });
     let offset = 0;
     for (const { path, object } of blobs) {
@@ -159,7 +161,7 @@ export function extractWorkspaceManifests(gitDir, commit, out, { entries = works
 
 // Submodule repositories belong to this worktree. The shared common directory
 // holds root objects, but not the linked worktree’s initialized modules.
-const gitDirOf = (repository) => execFileSync("git", ["rev-parse", "--absolute-git-dir"], { cwd: repository }).toString().trim();
+const gitDirOf = (repository) => execFileSync("git", ["-C", repository, "--no-replace-objects", "rev-parse", "--absolute-git-dir"], { env: { ...process.env, GIT_NO_REPLACE_OBJECTS: "1" } }).toString().trim();
 // What the package manager said about its refusal, without the cyclic-workspace warning that
 // leads every run of this workspace.
 const saidOf = (output) => output.split("\n").filter((line) => line.trim() && !/cyclic workspace/iu.test(line)).slice(-24).join("\n");

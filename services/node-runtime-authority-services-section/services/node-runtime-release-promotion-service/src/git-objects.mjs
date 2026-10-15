@@ -51,7 +51,12 @@ export function replaceInTreeSync(repository, tree, changes) {
   }));
   for (const [name, entry] of here) {
     if (entry === null) entries.delete(name);
-    else entries.set(name, { mode: entry.mode ?? "100644", type: entry.mode === "160000" ? "commit" : entry.mode === "040000" ? "tree" : "blob", object: entry.object });
+    else {
+      // New non-gitlink values must exist. Unchanged promisor objects below
+      // retain their exact selected-tree identities without materialization.
+      if (entry.mode !== "160000") gitSync(repository, ["cat-file", "-e", entry.object]);
+      entries.set(name, { mode: entry.mode ?? "100644", type: entry.mode === "160000" ? "commit" : entry.mode === "040000" ? "tree" : "blob", object: entry.object });
+    }
   }
   for (const [name, nested] of below) {
     const existing = entries.get(name);
@@ -61,7 +66,7 @@ export function replaceInTreeSync(repository, tree, changes) {
   }
   if (entries.size === 0) return null;
   const input = [...entries].map(([name, { mode, type, object }]) => `${mode} ${type} ${object}\t${name}`).join("\0") + "\0";
-  return gitTextSync(repository, ["mktree", "-z"], { input });
+  return gitTextSync(repository, ["mktree", "--missing", "-z"], { input });
 }
 
 /** A commit of `tree` over `parents`, authored as the repository's configured identity. */

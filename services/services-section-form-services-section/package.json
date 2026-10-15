@@ -33,10 +33,12 @@
     "@red-cup-engineering/json-schema-services-section": "workspace:*",
     "@red-cup-engineering/markdown-engineering-services-section": "workspace:*"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@red-cup-engineering/jsnode-package-services-section": "workspace:*"
+  },
   "scripts": {
-    "check": "node --check scripts/fold-directory-entries-into-services-section-form.mjs && node --check scripts/found-services-section.mjs && node --check scripts/check-services-section-form-conformance.mjs && node --check scripts/read-services-section-tree.mjs",
-    "test": "node --test test/*.test.mjs",
+    "check": "check-package-syntax",
+    "test": "run-package-tests",
     "pack:dry-run": "npm pack --dry-run --ignore-scripts"
   },
   "engines": {

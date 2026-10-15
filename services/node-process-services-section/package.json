@@ -43,11 +43,14 @@
     "src"
   ],
   "scripts": {
-    "check": "node --check src/*.mjs && node --check test/*.test.mjs",
-    "test": "node --test test/*.test.mjs"
+    "check": "check-package-syntax",
+    "test": "run-package-tests"
   },
   "engines": {
     "node": ">=22"
   },
-  "dependencies": {}
+  "dependencies": {},
+  "devDependencies": {
+    "@red-cup-engineering/jsnode-package-services-section": "workspace:*"
+  }
 }

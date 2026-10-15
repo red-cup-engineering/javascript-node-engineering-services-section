@@ -49,5 +49,18 @@
   },
   "engines": {
     "node": ">=22.18"
+  },
+  "devDependencies": {
+    "@pnpm/installing.client": "1100.3.15",
+    "@pnpm/resolving.npm-resolver": "1104.2.5",
+    "@pnpm/config.reader": "1102.3.4",
+    "@pnpm/lockfile.fs": "1100.2.13",
+    "@pnpm/lockfile.utils": "1102.1.6",
+    "@pnpm/config.version-policy": "1100.2.7",
+    "@pnpm/network.fetch": "1100.1.22",
+    "@pnpm/network.auth-header": "1101.1.16",
+    "@pnpm/constants": "1102.0.1",
+    "@pnpm/logger": "1100.0.0",
+    "@pnpm/worker": "1100.4.8"
   }
 }

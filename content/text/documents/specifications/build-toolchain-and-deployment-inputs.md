@@ -30,6 +30,10 @@ The owning Ethereum producer is preferable to a new house implementation of the 
 
 The exact compiler must be resolved from the producing owner's installed dependency instance and received against the whole root lock, including its transitives. A package-name match elsewhere in the workspace cannot substitute for supplier identity. The independent exact-compiler qualification proves four outputs, byte-identical repetition, invalid-source refusal and foreign-owner refusal; five planner tests plus three genuine compilation tests pass. These facts do not replace native full-root installation, aggregate generation ordering, production-pack exclusion of solc, or consumer receiving.
 
+## Decision: bounded native registry metadata acquisition
+
+The [native registry metadata input decision](../../../../services/node-runtime-authority-services-section/services/node-runtime-release-promotion-service/content/text/documents/specifications/native-registry-metadata-inputs.md) qualifies the exact PNPM 11.28.5 public API cohort in the original release fabricator solely for obtaining immutable build-time metadata. Runtime import and production-pack use are forbidden; frozen no-network receiving and installed supplier identity remain independent obligations.
+
 ## Decision: declared host/profile dependencies are used
 
 For an explicitly identified deployment-root package, a dependency is used when an exact selected host, instance, profile or machine declaration names a real public entrance that the native loader admits for that role. Retain the declaration's repository, revision, path and module/subpath in receiving evidence. Traverse nested declaration modules, including obligation drivers and schedules, according to the actual loader. Verify that the target package and exported entrance exist, that the intended role activates it, and that the production pack supplies its real transitive closure. Do not add dummy imports to satisfy a syntactic audit or remove original declarations merely to obtain a green build. An ordinary library's unused dependency is not excused by this deployment-root rule.

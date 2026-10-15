@@ -48,7 +48,7 @@ function condition(target, sourceMode, privateTarget = false) {
 
 function exported(manifest, subpath, sourceMode) {
   const { exports } = manifest;
-  if (exports === undefined) return subpath === "." ? manifest.main ?? "index.js" : subpath;
+  if (exports == null) return subpath === "." ? manifest.main ?? "index.js" : subpath;
   const map = typeof exports === "string" || Array.isArray(exports) || !Object.keys(exports).some((key) => key.startsWith("."))
     ? { ".": exports }
     : exports;
@@ -93,6 +93,15 @@ function packageDirectory(name, from) {
     if (existsSync(candidate) && statSync(candidate).isDirectory()) return candidate;
     if (dirname(directory) === directory) return null;
   }
+}
+
+// Node 24's legacyMainResolve sequence applies only to the package root when
+// exports is absent. Explicit subpaths and relative ESM imports stay exact.
+function installedLegacyMain(root, main) {
+  const candidates = typeof main === "string"
+    ? ["", ".js", ".json", ".node", "/index.js", "/index.json", "/index.node"].map(suffix => resolve(root, (main || "./") + suffix)) : [];
+  candidates.push(...["index.js", "index.json", "index.node"].map(path => join(root, path)));
+  return candidates.find(file => existsSync(file) && statSync(file).isFile());
 }
 
 function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode, sourcePackages) {
@@ -144,13 +153,17 @@ function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode,
   const name = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
   // A package may import itself by its own name.
   const own = packageOf(from);
-  const directory = own.manifest.name === name && own.manifest.exports !== undefined ? own.root : sourcePackages === undefined ? packageDirectory(name, from) : sourcePackages.get(name)?.root ?? null;
+  const directory = own.manifest.name === name && own.manifest.exports != null ? own.root : sourcePackages === undefined ? packageDirectory(name, from) : sourcePackages.get(name)?.root ?? null;
   if (directory === null) return { external: `unresolved:${specifier}` };
   const root = realpathSync(directory);
   const manifestPath = join(root, "package.json");
   const manifest = sourcePackages?.get(name)?.manifest ?? (existsSync(manifestPath)
     ? JSON.parse(readFileSync(manifestPath, "utf8")) : {});
   if (!includeInstalled && root.split(sep).includes("node_modules")) return { external: `${manifest.name}@${manifest.version}` };
+  if (includeInstalled && manifest.exports == null && specifier === name) {
+    const file = installedLegacyMain(root, manifest.main);
+    return file === undefined ? { external: `unresolved:${specifier}` } : { file };
+  }
   const target = exported(manifest, specifier === name ? "." : `./${specifier.slice(name.length + 1)}`, sourceMode);
   return target === null ? { external: `unexported:${specifier}` } : { file: resolve(root, target) };
 }

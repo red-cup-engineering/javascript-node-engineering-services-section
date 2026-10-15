@@ -73,6 +73,27 @@ level-triggered and does one of the following:
 Each pass leaves its reading at `<releaseRoot>/status.json`. The 561 Group
 runs it as the `node-release-reconcile` operation on a node's work clock.
 
+## Native source reader for release-machine consumers
+
+Code owns the original `readNodeWorkspace` and `workspaceSourceReader`
+implementations in `src/read-workspace-source.mjs`. External Engineering
+consumers, including the Guix release controller's native baseline/candidate
+comparison, import the **published package interface**:
+
+```js
+import {readNodeWorkspace} from
+  '@red-cup-engineering/node-runtime-release-promotion-service/read-workspace-source';
+```
+
+This is the existing Git-committed recursive source reader, not a Guix-local
+copy, a source inventory, a lockfile substitute, or a certification receipt.
+Run it on a genuine admitted checkout **after** native frozen PNPM installation
+with the source owner's declared PNPM executable. A caller must retain the
+Git-backed importer/source identities, reject mutation using `reader.verify()`,
+and separately qualify test execution, LAGOON artifact construction, deployment
+and independent target receiving. No source read by itself grants a merge,
+release, billing authority or production activation.
+
 ## Fabricate the authoritative recursive workspace
 
 The LAGOON production path uses Git's recorded recursive source owners, the

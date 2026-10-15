@@ -67,6 +67,14 @@ The resolver owns the mapping from each request and resolution mode to the actua
 
 Compiler suppliers receive the same treatment. Their real loading semantics must pass qualification, including any supported CommonJS imports, before adopting an execution mechanism. Runtime output cannot be silently substituted for the authored source and installed supplier admitted by the plan.
 
+Installed package scope stops at the nearest package directory even when that
+directory lacks `package.json`; it must not search onward for a different
+supplier. This is Node 24's `getPackageJSONURL` directory-selection rule. The
+shared JavaScript module-closure resolver supplies this selection to both
+programme capture and Code's static compiler before esbuild inspects symbols.
+An incomplete nearby scope remains an unresolved interface. Reading and resolving
+source does not execute the application or establish a complete fabrication.
+
 ### Runtime declarations and generated descriptors
 
 An operation's declaration belongs to its actual provider, separately from its effectful implementation. Runtime construction and descriptor aggregation consume the same independent declaration modules or schema inputs. MetroPlat owns the composition and its public family names; the supplying packages retain their schemas and operation contracts.

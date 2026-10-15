@@ -88,7 +88,9 @@ function privateImportedTarget(map, subpath, sourceMode = "import") {
 function packageDirectory(name, from) {
   for (let directory = dirname(from); ; directory = dirname(directory)) {
     const candidate = join(directory, "node_modules", name);
-    if (existsSync(join(candidate, "package.json"))) return candidate;
+    // Node's getPackageJSONURL selects the nearest package directory, even
+    // when it has no manifest. Skipping it would admit a different supplier.
+    if (existsSync(candidate) && statSync(candidate).isDirectory()) return candidate;
     if (dirname(directory) === directory) return null;
   }
 }
@@ -145,7 +147,9 @@ function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode,
   const directory = own.manifest.name === name && own.manifest.exports !== undefined ? own.root : sourcePackages === undefined ? packageDirectory(name, from) : sourcePackages.get(name)?.root ?? null;
   if (directory === null) return { external: `unresolved:${specifier}` };
   const root = realpathSync(directory);
-  const manifest = sourcePackages?.get(name)?.manifest ?? JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const manifestPath = join(root, "package.json");
+  const manifest = sourcePackages?.get(name)?.manifest ?? (existsSync(manifestPath)
+    ? JSON.parse(readFileSync(manifestPath, "utf8")) : {});
   if (!includeInstalled && root.split(sep).includes("node_modules")) return { external: `${manifest.name}@${manifest.version}` };
   const target = exported(manifest, specifier === name ? "." : `./${specifier.slice(name.length + 1)}`, sourceMode);
   return target === null ? { external: `unexported:${specifier}` } : { file: resolve(root, target) };
@@ -164,6 +168,15 @@ export function javascriptSourceResolver(packages) {
     owners.set(item.manifest.name, { root, manifest: item.manifest });
   }
   return (specifier, from) => resolveSpecifier(specifier, from, false, "import", owners);
+}
+
+/** Resolve installed source without importing or evaluating its programme.
+ * Capture and compilation share the same package scope and export selection. */
+export function javascriptInstalledResolver() {
+  return (specifier, from, mode = "import") => {
+    if (!["import", "require"].includes(mode)) throw new TypeError("installed module mode must be import or require");
+    return resolveSpecifier(specifier, from, true, mode);
+  };
 }
 
 function importsOf(file, text, strict = false) {

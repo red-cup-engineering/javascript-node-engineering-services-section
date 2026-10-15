@@ -2,15 +2,16 @@
 import { build } from "esbuild";
 import { declaredNodeRuntimeEntries } from "./source-entrances.mjs";
 import { parseJavaScript } from "@red-cup-engineering/javascript-node-services-section/javascript-parser";
+import { javascriptInstalledResolver } from "@red-cup-engineering/javascript-node-services-section/module-closure";
 import {comparePackedManifest,readPackedWorkspacePackages} from "./packed-workspace-packages.mjs";
 import { readNodeWorkspace } from "./read-workspace-source.mjs";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { nodeJobProgramEntries } from "@red-cup-engineering/node-job-service";
 
 
 /** Compile source bindings without executing the application or replacing its installed layout. */
-export async function compileNodeRuntime({ entries: requestedEntries = [], workspace, pnpm, runtime: runtimePath, jobDirectories = [], preserveSymlinks = false } = {}) {
+export async function compileNodeRuntime({ entries: requestedEntries = [], workspace, pnpm, filter, runtime: runtimePath, jobDirectories = [], preserveSymlinks = false } = {}) {
   if (!Array.isArray(requestedEntries) || requestedEntries.some(entry => typeof entry !== "string" || !entry)) {
     throw new TypeError("explicit source entries must be nonempty paths");
   }
@@ -19,13 +20,14 @@ export async function compileNodeRuntime({ entries: requestedEntries = [], works
   if (!Array.isArray(jobDirectories) || jobDirectories.some(path => typeof path !== "string" || !path)) throw new TypeError("job directories must be nonempty paths");
   if (jobDirectories.length && runtime === undefined) throw new TypeError("job programs must be compiled from their packed runtime");
   for (const jobsDirectory of jobDirectories) entries.push(...nodeJobProgramEntries({ runtimeRoot: runtime, jobsDirectory }));
-const source = workspace === undefined ? undefined : await readNodeWorkspace({ workspace, pnpm });
+const source = workspace === undefined ? undefined : await readNodeWorkspace({ workspace, pnpm, filter });
 if (runtime !== undefined && source === undefined) throw new TypeError("a packed runtime requires its source workspace");
 const failures = [];
 const workspaceNames = new Set();
 const inspectedPackages = [];
 const externalModules = new Set();
 const inspectedModules = new Set();
+const resolveInstalled = javascriptInstalledResolver();
 const vendorReexports = [];
 const starExports = new Map();
 function isStarExport(importer, specifier) {
@@ -87,6 +89,22 @@ try { compilation = await build({ metafile: true, entryPoints: [...new Set(entri
       }
       externalModules.add(args.path);
       return { path: args.path, external: true };
+    });
+    // esbuild may search past an incomplete package scope or apply extension
+    // fallbacks that Node's ESM loader does not use. Bind the actual installed
+    // supplier before asking the compiler to inspect its exported symbols.
+    builder.onResolve({ filter: /./ }, args => {
+      if (preserveSymlinks || !args.importer || args.kind === "entry-point") return;
+      const mode = ["require-call", "require-resolve"].includes(args.kind) ? "require" : "import";
+      try {
+        const selected = resolveInstalled(args.path, args.importer, mode);
+        if (selected === null || selected?.builtin) return;
+        if (!selected?.file || !statSync(selected.file).isFile())
+          throw new TypeError(selected?.external ?? "installed import does not select a regular file");
+        return { path: realpathSync(selected.file) };
+      } catch (error) {
+        return { errors: [{ text: `Installed ${mode} binding refused: ${args.path}: ${error.message}` }] };
+      }
     });
   } }],
   external: ["*.node", "*.wasm"], loader: { ".sql": "text", ".txt": "text" } });

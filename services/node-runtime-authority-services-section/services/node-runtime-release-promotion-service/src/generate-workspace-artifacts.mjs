@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFile,realpath,lstat,mkdir,writeFile,chmod} from 'node:fs/promises';
-import {join,resolve,dirname,isAbsolute} from 'node:path';
+import {join,resolve,dirname,isAbsolute,relative,basename,sep} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {prepareWorkspaceTypeScriptGeneration} from './generate-workspace-typescript.mjs';
 import {readNodeWorkspace} from './read-workspace-source.mjs';
@@ -33,11 +33,21 @@ export async function generateWorkspaceArtifacts(options){
   const assessment=await assessSourceInterfaces({workspace,commit:source.commit,importerIds:source.importerIds,recursiveSource:true,sourceReader:reader});
   const order=workspaceGenerationOrder(generation,assessment);
   await reader.verify();
-  if(options.planOnly)return {type:'NodeRuntimeWorkspaceGenerationPlan',version:1,sourceCommit:source.commit,
+  const plan={type:'NodeRuntimeWorkspaceGenerationPlan',version:1,sourceCommit:source.commit,
     applicationExecuted:false,productsEmitted:false,
     importerIds:source.importerIds,...(source.filter===undefined?{}:{filter:source.filter}),
     generationOrder:order.map(({provider,requires})=>({producer:provider.id,inputs:provider.inputs,outputs:provider.outputs,requires})),
     sources:[...reader.sources.values()],missing:assessment.missing,unreceived:assessment.unreceived};
+  if(options.planOutput!==undefined){
+    if(typeof options.planOutput!=='string'||!options.planOutput||options.planOutput.includes('\0'))throw new TypeError('plan output must name a file outside the source workspace');
+    const requested=resolve(options.planOutput),output=join(await realpath(dirname(requested)),basename(requested)),offset=relative(workspace,output);
+    if(!isAbsolute(offset)&&offset!=='..'&&!offset.startsWith('..'+sep))throw new TypeError('plan output must remain outside the source workspace');
+    const held=await lstat(output).catch(error=>{if(error.code==='ENOENT')return null;throw error;});
+    if(held&&!held.isFile())throw new TypeError('plan output must be a regular file');
+    await writeFile(output,JSON.stringify(plan)+'\n',{mode:0o600});
+  }
+  if(options.planOnly)return plan;
+  if(plan.missing.length)throw new Error('Source interfaces or publication declarations are incomplete:\n'+JSON.stringify(plan.missing));
   for(const {provider}of order){
     if(provider.kind==='typescript'){await typed.emit(provider.name);continue;}
     const {importer,root,manifestBytes,manifest,contract}=provider;

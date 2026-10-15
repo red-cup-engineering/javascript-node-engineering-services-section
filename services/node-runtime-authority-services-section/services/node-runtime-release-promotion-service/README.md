@@ -94,6 +94,12 @@ When the caller selects a consumer with a native PNPM dependency filter, source
 assessment, generation and packed compilation receive that same `--filter`.
 They retain the recorded recursive workspace and authoritative root lock.
 
+Generation can retain its complete pre-emission plan with `--plan-output FILE`
+outside the workspace and emit from that same calculation. Explicit publication
+whitelists must cover declared entrances; known source or publication gaps refuse
+emission before any producer runs. Native packing still receives ignore rules and
+actual installed file contents.
+
 PNPM supplies the complete workspace inventory with its native recursive list.
 The source reader checks the committed root and recursive Gitlink topology,
 including staged pins and changes to `.gitmodules`, before consuming sources.

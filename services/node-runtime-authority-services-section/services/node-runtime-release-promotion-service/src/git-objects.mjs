@@ -8,9 +8,9 @@
 // compose promises; the async forms reject where the synchronous ones throw.
 import { execFileSync } from "node:child_process";
 
-export function gitSync(repository, arguments_, { input, env } = {}) {
+export function gitSync(repository, arguments_, { input, env, maxBuffer = 1 << 30 } = {}) {
   try {
-    return execFileSync("git", arguments_, { cwd: repository, maxBuffer: 1 << 30, input, stdio: ["pipe", "pipe", "pipe"], env: env ? { ...process.env, ...env } : process.env });
+    return execFileSync("git", arguments_, { cwd: repository, maxBuffer, input, stdio: ["pipe", "pipe", "pipe"], env: env ? { ...process.env, ...env } : process.env });
   } catch (error) {
     const failure = new Error(`git ${arguments_.join(" ")}: exited ${error.status ?? error.signal}: ${String(error.stderr ?? "").trim()}`);
     failure.status = typeof error.status === "number" ? error.status : 1;

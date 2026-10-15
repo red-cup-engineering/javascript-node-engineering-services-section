@@ -1,3 +1,7 @@
+import { parseJsonValue } from "@red-cup-engineering/json-services-section/parse-json-value";
+import { resolveJsonPointer } from "@red-cup-engineering/json-services-section/resolve-json-pointer";
+import { validateJsonSchema } from "@red-cup-engineering/json-schema-services-section/validation";
+import moduleParameterizationSchema from "@red-cup-engineering/computer-content-engineering-services-section/module-parameterization-schema" with { type: "json" };
 /**
  * The code a computation runs, as one identity: the modules its entries import, followed through
  * relative paths and workspace packages, each named by its package and path within it and digested
@@ -44,7 +48,7 @@ function condition(target, sourceMode, privateTarget = false) {
 
 function exported(manifest, subpath, sourceMode) {
   const { exports } = manifest;
-  if (exports === undefined) return subpath === "." ? manifest.main ?? "index.js" : subpath;
+  if (exports == null) return subpath === "." ? manifest.main ?? "index.js" : subpath;
   const map = typeof exports === "string" || Array.isArray(exports) || !Object.keys(exports).some((key) => key.startsWith("."))
     ? { ".": exports }
     : exports;
@@ -84,12 +88,23 @@ function privateImportedTarget(map, subpath, sourceMode = "import") {
 function packageDirectory(name, from) {
   for (let directory = dirname(from); ; directory = dirname(directory)) {
     const candidate = join(directory, "node_modules", name);
-    if (existsSync(join(candidate, "package.json"))) return candidate;
+    // Node's getPackageJSONURL selects the nearest package directory, even
+    // when it has no manifest. Skipping it would admit a different supplier.
+    if (existsSync(candidate) && statSync(candidate).isDirectory()) return candidate;
     if (dirname(directory) === directory) return null;
   }
 }
 
-function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode) {
+// Node 24's legacyMainResolve sequence applies only to the package root when
+// exports is absent. Explicit subpaths and relative ESM imports stay exact.
+function installedLegacyMain(root, main) {
+  const candidates = typeof main === "string"
+    ? ["", ".js", ".json", ".node", "/index.js", "/index.json", "/index.node"].map(suffix => resolve(root, (main || "./") + suffix)) : [];
+  candidates.push(...["index.js", "index.json", "index.node"].map(path => join(root, path)));
+  return candidates.find(file => existsSync(file) && statSync(file).isFile());
+}
+
+function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode, sourcePackages) {
   if (specifier.startsWith("node:") || BUILTIN.has(specifier.split("/")[0])) return null;
   if (includeInstalled && sourceMode === "require") {
     try { return { file: createRequire(pathToFileURL(from)).resolve(specifier) }; }
@@ -97,7 +112,13 @@ function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode)
   }
   if (specifier.startsWith(".") || specifier.startsWith("/")) {
     let file = resolve(dirname(from), specifier);
-    if (!existsSync(file)) return { external: `unresolved:${relative(packageOf(from).root, file)}` };
+    if (!existsSync(file)) {
+      // Source admission needs the exact target even before its native producer
+      // emits it. Installed execution keeps its ordinary unresolved refusal.
+      return sourcePackages === undefined
+        ? { external: `unresolved:${relative(packageOf(from).root, file)}` }
+        : { file };
+    }
     if (includeInstalled && statSync(file).isDirectory()) return { external: `import-directory:${specifier}` };
     return { file: statSync(file).isDirectory() ? join(file, "index.js") : file };
   }
@@ -126,19 +147,49 @@ function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode)
     if (!packageName || packageName.includes("%") || target.startsWith("@") && (!packageParts[0].slice(1) || !packageParts[1]))
       return { external: `invalid-import-target:${specifier}` };
     if (BUILTIN.has(target.split("/")[0])) return { builtin: `node:${target}` };
-    return resolveSpecifier(target, join(root, "package.json"), includeInstalled, sourceMode);
+    return resolveSpecifier(target, join(root, "package.json"), includeInstalled, sourceMode, sourcePackages);
   }
   const parts = specifier.split("/");
   const name = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
   // A package may import itself by its own name.
   const own = packageOf(from);
-  const directory = own.manifest.name === name && own.manifest.exports !== undefined ? own.root : packageDirectory(name, from);
+  const directory = own.manifest.name === name && own.manifest.exports != null ? own.root : sourcePackages === undefined ? packageDirectory(name, from) : sourcePackages.get(name)?.root ?? null;
   if (directory === null) return { external: `unresolved:${specifier}` };
   const root = realpathSync(directory);
-  const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
+  const manifestPath = join(root, "package.json");
+  const manifest = sourcePackages?.get(name)?.manifest ?? (existsSync(manifestPath)
+    ? JSON.parse(readFileSync(manifestPath, "utf8")) : {});
   if (!includeInstalled && root.split(sep).includes("node_modules")) return { external: `${manifest.name}@${manifest.version}` };
+  if (includeInstalled && manifest.exports == null && specifier === name) {
+    const file = installedLegacyMain(root, manifest.main);
+    return file === undefined ? { external: `unresolved:${specifier}` } : { file };
+  }
   const target = exported(manifest, specifier === name ? "." : `./${specifier.slice(name.length + 1)}`, sourceMode);
   return target === null ? { external: `unexported:${specifier}` } : { file: resolve(root, target) };
+}
+
+/** Resolve an ESM interface against the admitted source packages, without installation.
+ * The caller derives these packages from authenticated Git manifests; this
+ * catalogue supplies locations, never substitute export declarations.
+ */
+export function javascriptSourceResolver(packages) {
+  const owners = new Map();
+  for (const item of packages) {
+    if (!item.manifest?.name || owners.has(item.manifest.name)) throw new TypeError("source interfaces require unique named package owners");
+    const root = realpathSync(item.root);
+    if (JSON.stringify(JSON.parse(readFileSync(join(root, "package.json"), "utf8"))) !== JSON.stringify(item.manifest)) throw new TypeError("source catalogue differs from actual package manifest");
+    owners.set(item.manifest.name, { root, manifest: item.manifest });
+  }
+  return (specifier, from) => resolveSpecifier(specifier, from, false, "import", owners);
+}
+
+/** Resolve installed source without importing or evaluating its programme.
+ * Capture and compilation share the same package scope and export selection. */
+export function javascriptInstalledResolver() {
+  return (specifier, from, mode = "import") => {
+    if (!["import", "require"].includes(mode)) throw new TypeError("installed module mode must be import or require");
+    return resolveSpecifier(specifier, from, true, mode);
+  };
 }
 
 function importsOf(file, text, strict = false) {
@@ -344,4 +395,118 @@ export function moduleClosureBytes(id) {
   const bytes = Buffer.from(canonicalJson(moduleClosureMaterial(id)));
   if (byteAddress(bytes) !== id) throw new TypeError("JavaScript programme closure address mismatch");
   return bytes;
+}
+
+function moduleParameterizationShape(value, definition) {
+  const schema = { ...moduleParameterizationSchema, $ref: "#/$defs/" + definition };
+  delete schema.oneOf;
+  const judgment = validateJsonSchema(value, schema);
+  if (!judgment.valid) throw new TypeError("Invalid module parameterization " + definition + ": " + JSON.stringify(judgment.issues));
+  return value;
+}
+
+function freezeModuleParameterData(value, depth = 0) {
+  if (depth > 64) throw new RangeError("Module parameterization data exceeds depth 64");
+  if (value !== null && typeof value === "object") {
+    for (const child of Object.values(value)) freezeModuleParameterData(child, depth + 1);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+function bindModuleParameterValue(value, parameters, depth = 0) {
+  if (depth > 64) throw new RangeError("Module parameterization data exceeds depth 64");
+  if (value === null || typeof value !== "object") return value;
+  if (!Array.isArray(value) && Object.hasOwn(value, "$parameter")) {
+    if (Object.keys(value).length !== 1 || typeof value.$parameter !== "string"
+      || !Object.hasOwn(parameters, value.$parameter))
+      throw new TypeError("Module parameterization has an undeclared parameter");
+    return bindModuleParameterValue(parameters[value.$parameter], Object.create(null), depth + 1);
+  }
+  return Array.isArray(value)
+    ? value.map(item => bindModuleParameterValue(item, parameters, depth + 1))
+    : Object.fromEntries(Object.entries(value).map(([key, item]) => [key, bindModuleParameterValue(item, parameters, depth + 1)]));
+}
+
+/** Admit declaration grammar without reading data or importing any programme. */
+export function admitModuleParameterizationSources(sources) {
+  if (!Array.isArray(sources) || sources.length > 200)
+    throw new TypeError("Module parameterization requires at most 200 declared sources");
+  for (const source of sources) {
+    const judgment = validateJsonSchema(source, moduleParameterizationSchema);
+    if (!judgment.valid) throw new TypeError("Invalid module parameterization source declaration");
+  }
+  return sources;
+}
+
+/** Read and bind JSON source data only. The host imports its selected factories later.
+ * Source custody never grants effect authority. One invocation snapshots all referenced
+ * data before returning; it neither edits source nor opens a runtime programme.
+ */
+export async function readModuleParameterizations(sources, {
+  moduleBasePath, sourceDocument, readFile = file => readFileSync(file),
+} = {}) {
+  admitModuleParameterizationSources(sources);
+  const require = createRequire(moduleBasePath);
+  const document = sourceDocument === undefined ? undefined
+    : freezeModuleParameterData(structuredClone(sourceDocument));
+  const records = new Map(), digests = new Map();
+  let sourceBytes = 0;
+  const readDataRef = async reference => {
+    moduleParameterizationShape(reference, "dataRef");
+    const file = require.resolve(reference.module);
+    if (!file.endsWith(".json")) throw new TypeError("DataRef must resolve a package JSON data export");
+    if (digests.has(file) && digests.get(file) !== reference.sha256)
+      throw new TypeError("One module parameterization cannot select conflicting source digests");
+    digests.set(file, reference.sha256);
+    if (!records.has(file)) records.set(file, (async () => {
+      const bytes = await readFile(file);
+      if (!(bytes instanceof Uint8Array) || bytes.byteLength > 1024 * 1024)
+        throw new TypeError("DataRef requires at most one MiB of exact JSON source bytes");
+      sourceBytes += bytes.byteLength;
+      if (sourceBytes > 8 * 1024 * 1024) throw new RangeError("Module parameterization source exceeds eight MiB");
+      if (createHash("sha256").update(bytes).digest("hex") !== reference.sha256)
+        throw new TypeError("DataRef source digest differs");
+      return freezeModuleParameterData(parseJsonValue(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
+    })());
+    const record = await records.get(file);
+    if (record === null || typeof record !== "object" || Array.isArray(record)
+      || (record.id ?? record.$id) !== reference.record)
+      throw new TypeError("DataRef record identity differs");
+    const value = reference.pointer === undefined ? record : resolveJsonPointer(record, reference.pointer);
+    if (value === undefined) throw new TypeError("DataRef pointer is absent");
+    return value;
+  };
+  const resolved = await Promise.all(sources.map(async entry => {
+    if (!Object.hasOwn(entry, "dataRef"))
+      return { ...entry, configuration: bindModuleParameterValue(structuredClone(entry.configuration ?? {}), Object.create(null)) };
+    const descriptor = await readDataRef(entry.dataRef);
+    moduleParameterizationShape(descriptor, "descriptor");
+    const names = [...descriptor.parameters].sort(), supplied = Object.keys(entry.parameters).sort();
+    if (JSON.stringify(names) !== JSON.stringify(supplied))
+      throw new TypeError("Module parameterization must bind exactly its declared parameters");
+    if (JSON.stringify(Object.keys(descriptor.parameterSchemas).sort()) !== JSON.stringify(names))
+      throw new TypeError("Module parameterization requires one Data model for every parameter");
+    const parameters = Object.create(null);
+    await Promise.all(names.map(async name => {
+      const reference = entry.parameters[name];
+      if (Object.hasOwn(reference, "instancePointer")) {
+        moduleParameterizationShape(reference, "instancePointer");
+        if (document === undefined) throw new TypeError("Instance pointer requires the admitted source document");
+        const value = resolveJsonPointer(document, reference.instancePointer);
+        if (value === undefined) throw new TypeError("Module parameterization instance pointer is absent");
+        parameters[name] = structuredClone(value);
+      } else parameters[name] = await readDataRef(reference);
+      if (descriptor.parameterSchemas?.[name] !== undefined) {
+        const schema = await readDataRef(descriptor.parameterSchemas[name]);
+        if (!validateJsonSchema(parameters[name], schema).valid)
+          throw new TypeError("Module parameterization parameter is outside its declared Data model");
+      }
+    }));
+    const configuration = bindModuleParameterValue(descriptor.configuration, parameters);
+    if (configuration === null || typeof configuration !== "object" || Array.isArray(configuration))
+      throw new TypeError("Module parameterization configuration must resolve to an object");
+    return { module: descriptor.module, export: descriptor.export, configuration };
+  }));
+  return freezeModuleParameterData(resolved);
 }

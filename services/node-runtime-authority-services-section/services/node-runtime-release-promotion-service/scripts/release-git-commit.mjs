@@ -121,7 +121,7 @@ export async function releaseGitCommit({
   if (spec.backup && (!Number.isInteger(spec.backup.keepDays ?? 14) || (spec.backup.keepDays ?? 14) < 0)) throw new Error("backup.keepDays must be a non-negative integer");
   const scripts = relative(treeRoot(here), here);
   const local = !spec.host || spec.host === "local";
-  if (spec.entrances?.length && !local) throw new Error("edge entrance delivery requires the local release queue");
+  if (Object.hasOwn(spec, "entrances")) throw new TypeError("Node runtime release does not own Caddy ingress; compose entrances in the machine's Guix service tree");
   if (spec.runtimes?.length && !local) throw new Error("independent runtime bindings require the local host");
   let runtime = local ? quote(process.execPath) : "node";
   // Installers and verification commands must use the same Node as this release.
@@ -587,17 +587,26 @@ const guixCommand = (tree, arguments_) => {
   const at = (path) => local ? resolve(localHome, tree, path) : tree + "/" + path;
   return ["guix", "time-machine", "-C", at(spec.guix.channels), "--", "repl", "--", at(spec.guix.driver), ...arguments_].map(quote).join(" ");
 };
-let guixStore;
+let guixBuild;
 if (spec.guix) {
   const at = (path) => local ? resolve(localHome, release, path) : release + "/" + path;
   const root = spec.releaseRoot + "/guix/admitted-" + materialized.artifactDigest;
+  const buildRoot = local ? resolve(localHome, root) : root;
   await run("mkdir -p " + quote(spec.releaseRoot + "/guix"));
   const built = await timed("Guix closure", () => jsonStep(guixCommand(release, [
     "build", at(spec.guix.channels), at(spec.guix.loadPath), at(spec.guix.package),
-    local ? resolve(localHome, release) : release, local ? resolve(localHome, root) : root,
+    local ? resolve(localHome, release) : release, buildRoot,
   ]), spec.releaseRoot + "/.guix-build-" + commit + ".json"));
-  guixStore = built.storePath;
-  release = guixStore;
+  // Preserve the owning driver's storePath/root/narSha256 result. Receiving its
+  // shape is not independent store verification or authority to promote it.
+  if (!built || typeof built.storePath !== "string" || !built.storePath.startsWith("/gnu/store/") ||
+      resolve(built.storePath) !== built.storePath || built.storePath.slice("/gnu/store/".length).includes("/") ||
+      built.storePath === "/gnu/store/" || built.root !== buildRoot ||
+      typeof built.narSha256 !== "string" || !/^[a-f0-9]{64}$/u.test(built.narSha256)) {
+    throw new Error("Guix build receipt does not bind the requested root, store output and NAR SHA256");
+  }
+  guixBuild = { storePath: built.storePath, root: built.root, narSha256: built.narSha256 };
+  release = guixBuild.storePath;
   runtime = quote(release + "/bin/node");
 }
 // Everything the new release needs to start is checked before `current` moves.
@@ -648,14 +657,9 @@ const runtimePlans = await timed("runtime closures", () => prepareRuntimeBinding
   runtimes: spec.runtimes, home: localHome, repository,
   compilerPackage: resolve(localHome, release, scripts, '../package.json'),
 }));
-const entranceRuntime = spec.entrances === undefined ? undefined : await import("../src/caddy-entrance.mjs");
-const entrancePlans = entranceRuntime === undefined ? undefined : await timed("edge entrances", () => entranceRuntime.prepareCaddyEntrances({
-  release: resolve(localHome, release), entrances: spec.entrances,
-  execute: (file, arguments_) => commandOutput(file, arguments_, { cwd: localHome, env: commandEnvironment }),
-}));
 if (admit) {
   onStep(`admitted ${commit} as ${materialized.artifactDigest}`);
-  return { commit, release, materialized, admitted: true };
+  return { commit, release, materialized, admitted: true, ...(guixBuild ? { guix: guixBuild } : {}) };
 }
 if (beforePromotion) await beforePromotion({ commit, digest: materialized.artifactDigest });
 // Capture the old target before the state transition, including promotion failures that occur
@@ -703,7 +707,6 @@ const bindings = runtimeBindingTransaction(runtimePlans, {
   healthy: (plan) => run(`for i in $(seq 1 ${healthAttempts}); do ${healthProbeOf(plan.health, plan.healthExpect)} && exit 0; sleep ${healthIntervalSeconds}; done; exit 1`).then(() => true, () => false),
   onStep,
 });
-const entrances = entranceRuntime?.caddyEntranceTransaction(entrancePlans, onStep);
 
 // A digest is returned to by an ordinary verified promotion; a hand-placed target by relinking.
 async function restore(target) {
@@ -758,7 +761,7 @@ try {
   }
   promotionAttempted = true;
   promoted = spec.guix ? await jsonStep(guixCommand(release, [
-    "activate", release + "/" + spec.guix.channels, guixStore,
+    "activate", release + "/" + spec.guix.channels, guixBuild.storePath,
     local ? resolve(localHome, spec.releaseRoot, "current") : spec.releaseRoot + "/current",
   ]), spec.releaseRoot + "/.promotion-" + commit + ".json") : await jsonStep(
     `${runtime} ${quote(`${release}/${scripts}/promote-node-runtime-release.mjs`)} --release-root ${quote(spec.releaseRoot)} --digest ${materialized.artifactDigest} --receipt-root ${quote(spec.receiptRoot)}${materialized.reused ? "" : ` --commit ${quote(commit)}`} --derived ${quote(JSON.stringify(spec.derived ?? []))}`,
@@ -773,13 +776,7 @@ try {
   if (spec.restart) await run(spec.restart);
   if (spec.health && !(await timed("health", healthy))) throw new Error(`${spec.health} did not answer`);
   await timed("runtime receivers", () => bindings.apply());
-  if (entrances !== undefined) await timed("edge receivers", () => entrances.apply());
 } catch (error) {
-  // Restore the old entrance before returning its node to the previous tree.
-  // Even a concurrent edge edit must not prevent node rollback.
-  await entrances?.rollback().catch((failure) => {
-    error.message += "; edge rollback refused: " + failure.message;
-  });
   if (!promotionAttempted) {
     // Snapshot creation or transfer failed: the existing pointer and unit are still intact.
     if (!stoppedForSnapshot) throw error;
@@ -803,7 +800,7 @@ if (spec.health) onStep(`healthy: ${spec.health}`);
 if (spec.guix) {
   if (materialized.artifactDigest !== running) await run("rm -rf -- " + quote(preparedRelease));
   await run("rm -f -- " + quote(spec.releaseRoot + "/guix/admitted-" + materialized.artifactDigest));
-  return { commit, release, materialized, promoted, guix: { storePath: guixStore } };
+  return { commit, release, materialized, promoted, guix: guixBuild };
 }
 // Every independent process retains its own immutable tree beyond platform rollback history.
 const runtimeTargets = local ? await retainedRuntimeTargets(resolve(localHome, spec.releaseRoot)) : [];

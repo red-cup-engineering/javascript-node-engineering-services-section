@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { resolve } from "node:path";
-import { projectSelectedWorkspaceLock } from "../src/install-workspace-selection.mjs";
+import { exactImporterFilterArgs, projectSelectedWorkspaceLock } from "../src/install-workspace-selection.mjs";
 
 function fixture() {
   return {
@@ -75,4 +75,17 @@ test("refuses unsupported lockfile formats and relative tarballs", () => {
   const local = fixture();
   local.packages["peer@2.0.0"].resolution = { tarball: "../local.tgz", integrity: "sha512-retained" };
   assert.throws(() => project(local), /cannot relocate local package resolution/u);
+});
+
+test("lock-selected pnpm directories have exact filters, including root without its descendants", () => {
+  assert.deepEqual(exactImporterFilterArgs([".", "lib/host", "lib/deep/provider"]), [
+    "--filter={.}", "--filter={lib/host}", "--filter={lib/deep/provider}",
+  ]);
+  assert.notEqual("--filter={lib/host}", "--filter={lib/host/**}");
+});
+
+test("refuse unsafe selection selectors rather than interpreting glob injection", () => {
+  for (const paths of [[], ["." , "."], ["../outside"], ["/absolute"], ["lib/*"], ["lib/{other}"], ["lib/a//b"], ["./lib/pkg"], ["lib/a/../b"], ["lib/name!"]]) {
+    assert.throws(() => exactImporterFilterArgs(paths), /nonempty|duplicate|unsafe/u);
+  }
 });

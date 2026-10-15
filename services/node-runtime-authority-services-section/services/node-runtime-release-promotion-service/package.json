@@ -9,26 +9,59 @@
     "./digest": "./src/release-digest.mjs",
     "./reconcile": "./src/reconcile-release.mjs",
     "./install-workspace-selection": "./src/install-workspace-selection.mjs",
-    "./job": "./src/node-job.mjs",
     "./integrate": "./src/integrate.mjs",
     "./service": "./src/node-service.mjs",
-    "./source-delivery": "./src/source-delivery.mjs"
+    "./source-delivery": "./src/source-delivery.mjs",
+    "./compile-node-runtime": "./src/compile-node-runtime.mjs",
+    "./generate-workspace-typescript": "./src/generate-workspace-typescript.mjs",
+    "./assess-source-interfaces": "./src/assess-source-interfaces.mjs",
+    "./generate-workspace-artifacts": "./src/generate-workspace-artifacts.mjs",
+    "./receive-packed-packages": "./src/receive-packed-packages.mjs",
+    "./workspace-lockfile": "./src/workspace-lockfile.mjs"
   },
   "bin": {
     "promote-node-runtime-release": "./scripts/promote-node-runtime-release.mjs",
     "materialize-node-runtime-release": "./scripts/materialize-node-runtime-release.mjs",
     "release-git-commit": "./scripts/release-git-commit.mjs",
     "install-workspace-selection": "./scripts/install-workspace-selection.mjs",
-    "reconcile-node-release": "./scripts/reconcile-node-release.mjs"
+    "reconcile-node-release": "./scripts/reconcile-node-release.mjs",
+    "run-workspace-selection": "./scripts/run-workspace-selection.mjs",
+    "compile-node-runtime": "./scripts/compile-node-runtime.mjs",
+    "generate-workspace-typescript": "./scripts/generate-workspace-typescript.mjs",
+    "resolve-workspace-selection": "./scripts/resolve-workspace-selection.mjs",
+    "assess-node-runtime-source": "./scripts/assess-source-interfaces.mjs",
+    "generate-workspace-artifacts": "./scripts/generate-workspace-artifacts.mjs",
+    "receive-packed-packages": "./scripts/receive-packed-packages.mjs",
+    "qualify-workspace-lockfile": "./scripts/qualify-workspace-lockfile.mjs"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
+    "@red-cup-engineering/computer-content-address-engineering-services-section": "workspace:*",
+    "@red-cup-engineering/git-services-section": "workspace:*",
+    "@red-cup-engineering/javascript-computer": "workspace:*",
+    "@red-cup-engineering/javascript-node-services-section": "workspace:*",
+    "@red-cup-engineering/node-job-service": "workspace:*",
     "esbuild": "0.28.1",
-    "@red-cup-engineering/computer-content-engineering-services-section": "workspace:*"
+    "micromatch": "4.0.8",
+    "typescript": "5.9.3",
+    "yaml": "2.9.1"
   },
   "engines": {
     "node": ">=22.18"
+  },
+  "devDependencies": {
+    "@pnpm/installing.client": "1100.3.15",
+    "@pnpm/resolving.npm-resolver": "1104.2.5",
+    "@pnpm/config.reader": "1102.3.4",
+    "@pnpm/lockfile.fs": "1100.2.13",
+    "@pnpm/lockfile.utils": "1102.1.6",
+    "@pnpm/config.version-policy": "1100.2.7",
+    "@pnpm/network.fetch": "1100.1.22",
+    "@pnpm/network.auth-header": "1101.1.16",
+    "@pnpm/constants": "1102.0.1",
+    "@pnpm/logger": "1100.0.0",
+    "@pnpm/worker": "1100.4.8"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@red-cup-engineering/javascript-node-services-section",
-  "version": "0.3.0",
+  "version": "0.3.1-dev.0",
   "type": "module",
   "description": "Node.js execution of schema-bound operations and shared command transports.",
   "exports": {
@@ -72,11 +72,13 @@
     "@red-cup-engineering/computer-data-engineering-services-section": "workspace:*",
     "@red-cup-engineering/node-process-services-section": "workspace:*",
     "@red-cup-engineering/metrologic": "workspace:*",
-    "@red-cup-engineering/jsonl-services-section": "workspace:*"
+    "@red-cup-engineering/jsonl-services-section": "workspace:*",
+    "@red-cup-engineering/json-schema-services-section": "workspace:*",
+    "@red-cup-engineering/computer-content-engineering-services-section": "workspace:*"
   },
   "devDependencies": {
-    "@red-cup-engineering/jsnode-package-services-section": "workspace:*",
     "@red-cup-engineering/jsonl-services-section": "workspace:*",
-    "@red-cup-engineering/metrologic": "workspace:*"
+    "@red-cup-engineering/metrologic": "workspace:*",
+    "@red-cup-engineering/jsnode-package-services-section": "workspace:*"
   }
 }

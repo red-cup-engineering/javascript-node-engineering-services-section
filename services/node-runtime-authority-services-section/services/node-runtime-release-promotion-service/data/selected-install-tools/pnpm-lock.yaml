@@ -14,6 +14,9 @@ importers:
       '@pnpm/lockfile.fs':
         specifier: 1100.2.10
         version: 1100.2.10(@pnpm/logger@1100.0.0)
+      pnpm:
+        specifier: 11.28.5
+        version: 11.28.5
 
 packages:
 
@@ -279,6 +282,11 @@ packages:
 
   path-name@1.0.0:
     resolution: {integrity: sha512-/dcAb5vMXH0f51yvMuSUqFpxUcA8JelbRmE5mW/p4CUJxrNgK24IkstnV7ENtg2IDGBOu6izKTG6eilbnbNKWQ==}
+
+  pnpm@11.28.5:
+    resolution: {integrity: sha512-SEVj0wtMKtJ8tIqpT/KzAtvOvI/2vyiBbCWJiG4UbOf3bzVPO8GkOOb16XaMMCqgpvet2CMpA81M+BQmy8FNng==}
+    engines: {node: '>=22.13'}
+    hasBin: true
 
   pretty-ms@9.3.1:
     resolution: {integrity: sha512-HzMy3Geq23nVALD/M2LliU+F+M+gVNsvkQWWqeBZ8HDiCgzo6YPJ/Omrmtq24EFrIsk0a3EkQGEd7bDOo+IhGA==}
@@ -653,6 +661,8 @@ snapshots:
   path-key@4.0.0: {}
 
   path-name@1.0.0: {}
+
+  pnpm@11.28.5: {}
 
   pretty-ms@9.3.1:
     dependencies:

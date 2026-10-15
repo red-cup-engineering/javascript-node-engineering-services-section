@@ -44,7 +44,8 @@ async function mainAdmissible({ repository, base, lockfile, queueRoot, home, rel
     if (memo.base === base) return memo.admissible;
   } catch { /* not yet read for any main */ }
   let admissible = true;
-  try { await deriveIntegration({ repository, base, head: base, lockfile }); } catch { admissible = false; }
+  try { await deriveIntegration({ repository, base, head: base, lockfile }); }
+  catch (error) { if (error.interrupted) throw error; admissible = false; }
   mkdirSync(queueRoot, { recursive: true });
   writeFileSync(memoPath, `${JSON.stringify({ base, admissible, at: new Date().toISOString() })}\n`);
   return admissible;
@@ -56,6 +57,11 @@ export async function integrateNodeCandidates({ repository, specInCommit, batchS
   const base = await gitText(repository, ["rev-parse", "--verify", "refs/remotes/origin/main^{commit}"]);
   const spec = JSON.parse(await gitText(repository, ["show", `${base}:${specInCommit}`]));
   const queueRoot = resolve(home, spec.releaseRoot, "queue");
+  // Derivation and receiving use the same release declaration. The retained
+  // output only avoids repeated resolution; it is frozen-received on every use.
+  const lockfileOf = sourceSpec => sourceSpec.lockfile && { ...sourceSpec.lockfile, install: sourceSpec.dependencies ?? sourceSpec.install,
+    stateDirectory: resolve(queueRoot, "workspace-lockfiles"), home };
+  const baseLockfile = lockfileOf(spec);
   batchSize = spec.queue?.batch ?? batchSize;
   const named = await pendingCandidates({ repository, queueRoot });
   // Every declared delivery receives its own judgment; ancestry proves no fulfillment.
@@ -94,7 +100,10 @@ export async function integrateNodeCandidates({ repository, specInCommit, batchS
       onStep(`batch of ${composed.length} refused; its halves are admitted in turn`);
       return { base, outcome: "suspect" };
     }
-    if (!(await mainAdmissible({ repository, base, lockfile: spec.lockfile, queueRoot, home, releaseRoot: spec.releaseRoot }))) {
+    let baseAdmissible;
+    try { baseAdmissible = await mainAdmissible({ repository, base, lockfile: baseLockfile, queueRoot, home, releaseRoot: spec.releaseRoot }); }
+    catch (error) { if (error.interrupted) return { base, outcome: "interrupted", reason: error.message }; throw error; }
+    if (!baseAdmissible) {
       setWaitingOnMain(queueRoot, base, [...waiting, ...keys]);
       setSuspectGroups(queueRoot, laterGroups);
       onStep(`${composed[0].name} waits on main: ${base} cannot be admitted by itself, so this failure is main's, not the candidate's`);
@@ -107,14 +116,23 @@ export async function integrateNodeCandidates({ repository, specInCommit, batchS
 
   let integration;
   try {
+    // The release admits the composed commit's declaration, not the former
+    // base's. Invalid/missing candidate declarations follow ordinary bisection
+    // and refusal, rather than crashing the queue before its failure handler.
+    const candidateSpec = JSON.parse(await gitText(repository, ["show", `${head}:${specInCommit}`]));
+    const lockfile = lockfileOf(candidateSpec);
     // Derivation resolves online, and a registry that blinked is no fault of the batch: it is said
     // and tried once more before any candidate is suspected (a batch was bisected over one at 19:13Z).
-    integration = await deriveIntegration({ repository, base, head, lockfile: spec.lockfile }).catch(async (error) => {
+    integration = await deriveIntegration({ repository, base, head, lockfile }).catch(async (error) => {
+      if (error.interrupted) throw error;
       onStep(`lockfile derivation failed, trying once more: ${tailOf(error.said ?? error.message).split("\n").slice(-4).join(" | ")}`);
       await new Promise((resolvePromise) => setTimeout(resolvePromise, 30_000));
-      return deriveIntegration({ repository, base, head, lockfile: spec.lockfile });
+      return deriveIntegration({ repository, base, head, lockfile });
     });
   } catch (error) {
+    // An unavailable/lost lease or interrupted command says nothing about a
+    // candidate's admissibility. Leave its queue entry pending for resumption.
+    if (error.interrupted) return { base, outcome: "interrupted", reason: error.message };
     onStep(`lockfile derivation refused the batch: ${tailOf(error.said ?? error.message).split("\n").slice(-6).join(" | ")}`);
     if (composed.length > 0) return failed({ reason: "derivation refused: the composed manifests do not resolve", said: tailOf(error.said ?? error.message) });
     await answer({ repository, queueRoot, candidates: [{ name: "node/main", ref: "refs/remotes/origin/main", commit: base, local: true, main: true }],
@@ -206,3 +224,4 @@ if (import.meta.main) {
   });
   process.stdout.write(`${JSON.stringify(result)}\n`);
 }
+

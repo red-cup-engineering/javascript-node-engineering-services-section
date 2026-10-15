@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import { realpathSync } from 'node:fs';
-import { relative, sep, isAbsolute } from 'node:path';
+import { realpathSync, lstatSync, readFileSync, readlinkSync } from 'node:fs';
+import { relative, sep, isAbsolute, join } from 'node:path';
 import { gitSync, gitTextSync, entryAtSync, treeOfSync, writeBlobSync, replaceInTreeSync, derivedCommitSync, isAncestorSync } from './git-objects.mjs';
 import { nameCandidateSync } from './integrate.mjs';
 
@@ -105,4 +105,168 @@ export function prepareSourceTreeDeliverySync({repository,sourceBase,proposalId,
  const name='development/tree-'+Buffer.from(proposalId.split(';')[1],'base64url').toString('hex');
  const summary=Object.freeze({sourceBase,commit,name,proposal:proposalId,path,sourceCommit,sourceTree:tree});
  return Object.freeze({summary,activate(){return nameCandidateSync({repository,name,commit,sourceBase,message:'Receive source tree '+proposalId});}});
+}
+
+/** Receive finite published source into an existing checkout. The caller must
+ * coordinate exclusive writers of this checkout's named paths, index and HEAD
+ * throughout prepare/receive. This is a Git custody operation, not an office or
+ * effect authorization, and cannot make uncoordinated editors atomic. Child
+ * gitlink working bodies are never visited or checked out. Preflight checks
+ * precede mutation; interrupted effects or post-effect ref/readback refusals may
+ * leave named paths partly received with HEAD unchanged. A new preflight must
+ * receive the current public ref and named states before further effects.
+ * Explicit correspondence retains held source in the target's public ancestor
+ * history even when the approved target supersedes that file. The caller's
+ * source judgment owns that replacement; unpublished unique carriers refuse.
+ */
+export function preparePublishedSourceReceivingSync({ repository, sourceBase, target, ref,
+  remote = 'origin', coordinated = false, publicCorrespondence = {} }) {
+  repository = realpathSync(repository);
+  if (process.env.GIT_INDEX_FILE || process.env.GIT_DIR || process.env.GIT_WORK_TREE)
+    throw new TypeError('source receiving cannot use an overridden checkout or index');
+  const oid = value => {
+    if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(value ?? '')) throw new TypeError('source receiving needs full immutable commits');
+    return value;
+  };
+  oid(sourceBase); oid(target);
+  if (coordinated !== true) throw new TypeError('source receiving needs caller-coordinated exclusive writers');
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(remote)
+      || typeof ref !== 'string' || !ref.startsWith('refs/heads/')) throw new TypeError('source receiving needs one exact public branch');
+  gitSync(repository, ['check-ref-format', ref]);
+  if (realpathSync(gitTextSync(repository, ['rev-parse', '--show-toplevel'])) !== repository)
+    throw new TypeError('source receiving requires the checkout owner');
+  if (!isAncestorSync(repository, sourceBase, target)) throw new TypeError('source receiving must retain original source history');
+  const publicHead = () => {
+    const rows = gitTextSync(repository, ['ls-remote', '--refs', remote, ref]).split('\n').filter(Boolean);
+    if (rows.length !== 1 || rows[0] !== target + '\t' + ref) throw new TypeError('published source ref differs from the selected target');
+  };
+  publicHead();
+  const paths = String(gitSync(repository, ['diff-tree', '--no-commit-id', '--name-only', '-z', '-r', '--no-renames', sourceBase, target], {maxBuffer: 128 * 1024}))
+    .split('\0').filter(Boolean).map(pathOf);
+  if (paths.length > 200) throw new TypeError('source receiving exceeds 200 changed paths');
+  const attributes = () => {
+    if (!paths.length) return [];
+    return [[], ['--cached'], ['--source=' + target]].map(selection => {
+      const fields = String(gitSync(repository, ['check-attr', ...selection, '-z', '--stdin',
+        'filter', 'text', 'eol', 'working-tree-encoding', 'ident'], {input: paths.join('\0') + '\0', maxBuffer: 128 * 1024})).split('\0');
+      const profiles=new Map();
+      for (let offset=0;offset+2<fields.length;offset+=3) {
+        const profile=profiles.get(fields[offset])??{};
+        profile[fields[offset+1]]=fields[offset+2];profiles.set(fields[offset],profile);
+      }
+      for(const [path,profile] of profiles) {
+        const unset=value=>['unspecified','unset'].includes(value);
+        if(!unset(profile.filter)||!unset(profile['working-tree-encoding'])||!unset(profile.ident)
+          ||!(unset(profile.text)&&unset(profile.eol)
+            || profile.text==='set'&&profile.eol==='lf'
+            || profile.text==='auto'&&unset(profile.eol)))
+          throw new TypeError('source receiving refuses unreceived checkout transformations: '+path);
+      }
+      return fields;
+    });
+  };
+  const attributeState = attributes();
+  const allowed = new Set(paths);
+  if (!publicCorrespondence || typeof publicCorrespondence !== 'object' || Array.isArray(publicCorrespondence)
+      || Object.keys(publicCorrespondence).some(path => !allowed.has(path))) throw new TypeError('source correspondence must name changed paths only');
+  const stateOfEntry = entry => entry === null ? null : {mode: entry.mode, object: entry.object};
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  const head = () => gitTextSync(repository, ['rev-parse', '--verify', 'HEAD^{commit}']);
+  const before = treeOfSync(repository, sourceBase), after = treeOfSync(repository, target);
+  const work = path => {
+    const parts = path.split('/');
+    for (let index = 1; index < parts.length; index++) {
+      try { if (!lstatSync(join(repository, ...parts.slice(0, index))).isDirectory()) throw new TypeError('source parent is not a real directory: ' + path); }
+      catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+    }
+    let stat; try { stat = lstatSync(join(repository, path)); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+    if (stat.isDirectory()) return {directory: true};
+    if (stat.size > 16 * 1024 * 1024) throw new TypeError('source receiving carrier exceeds 16 MiB: ' + path);
+    const bytes = stat.isSymbolicLink() ? Buffer.from(readlinkSync(join(repository, path)))
+      : stat.isFile() ? readFileSync(join(repository, path)) : null;
+    if (bytes === null) throw new TypeError('unsupported source carrier: ' + path);
+    return {mode: stat.isSymbolicLink() ? '120000' : stat.mode & 0o111 ? '100755' : '100644',
+      object: gitTextSync(repository, ['hash-object', '--stdin'], {input: bytes})};
+  };
+  const index = path => {
+    const rows = String(gitSync(repository, ['ls-files', '--stage', '-z', '--', path], {env: {GIT_LITERAL_PATHSPECS: '1'}, maxBuffer: 128 * 1024})).split('\0').filter(Boolean);
+    if (rows.length === 0) return null;
+    if (rows.length !== 1 || !rows[0].endsWith('\t' + path)) throw new TypeError('unmerged or overlapping index source: ' + path);
+    const [mode, object, stage] = rows[0].split('\t')[0].split(' ');
+    if (stage !== '0') throw new TypeError('unmerged index source: ' + path);
+    return {mode, object};
+  };
+  const observations = paths.map(path => {
+    const old = stateOfEntry(entryAtSync(repository, before, path));
+    const incoming = stateOfEntry(entryAtSync(repository, after, path));
+    if ([old, incoming].some(entry => entry && !['100644', '100755', '120000', '160000'].includes(entry.mode)))
+      throw new TypeError('unsupported immutable source carrier: ' + path);
+    const held = work(path), staged = index(path);
+    let correspondence = null;
+    if (publicCorrespondence[path] !== undefined) {
+      const commit = oid(publicCorrespondence[path]);
+      if (!isAncestorSync(repository, commit, target)) throw new TypeError('held source correspondence is not retained publicly: ' + path);
+      correspondence = stateOfEntry(entryAtSync(repository, commit, path));
+      if (!correspondence || !['100644', '100755', '120000', '160000'].includes(correspondence.mode))
+        throw new TypeError('public held source correspondence needs a supported carrier: ' + path);
+    }
+    const admitted = value => same(value, old) || same(value, incoming) || correspondence !== null && same(value, correspondence);
+    if (!admitted(staged)) throw new TypeError('unique indexed source needs composition: ' + path);
+    if (old?.mode === '160000' || incoming?.mode === '160000') {
+      if (old?.mode !== incoming?.mode || !held?.directory) throw new TypeError('gitlink carrier transition needs separate receiving: ' + path);
+    } else if (!admitted(held)) throw new TypeError('unique working source needs composition: ' + path);
+    return {path, old, incoming, held, staged};
+  });
+  // The selected LF profile is admitted only when every relevant existing
+  // byte carrier is already LF text. A text attribute alone is no byte proof.
+  const lfPaths=new Set(attributeState.flatMap(fields=>{
+    const result=[];
+    for(let offset=0;offset+2<fields.length;offset+=3)
+      if(fields[offset+1]==='eol'&&fields[offset+2]==='lf'
+        || fields[offset+1]==='text'&&fields[offset+2]==='auto')result.push(fields[offset]);
+    return result;
+  }));
+  const lfBytes=(bytes,path)=>{
+    if(bytes.includes(13)||bytes.includes(0))throw new TypeError('LF receiving requires existing LF text: '+path);
+    new TextDecoder('utf-8',{fatal:true}).decode(bytes);
+  };
+  for(const row of observations)if(lfPaths.has(row.path)) {
+    // Gitlinks are index-only named commits; no child body is checked out.
+    if(row.old?.mode==='160000'&&row.incoming?.mode==='160000')continue;
+    for(const entry of [row.old,row.incoming,row.staged])if(entry) {
+      if(!['100644','100755'].includes(entry.mode))throw new TypeError('LF receiving requires a regular text carrier: '+row.path);
+      lfBytes(gitSync(repository,['cat-file','blob',entry.object]),row.path);
+    }
+    if(row.held) {
+      if(!['100644','100755'].includes(row.held.mode))throw new TypeError('LF receiving requires a regular held text carrier: '+row.path);
+      lfBytes(readFileSync(join(repository,row.path)),row.path);
+    }
+  }
+  if (head() !== sourceBase) throw new TypeError('source receiving HEAD differs from original source');
+  const summary = Object.freeze({sourceBase, target, remote, ref, paths: Object.freeze([...paths]),
+    gitlinks: Object.freeze(observations.filter(row => row.incoming?.mode === '160000').map(row => row.path))});
+  return Object.freeze({summary, receive() {
+    publicHead();
+    if (!same(attributes(), attributeState)) throw new TypeError('source receiving checkout attributes changed');
+    if (head() !== sourceBase) throw new TypeError('source receiving HEAD changed before mutation');
+    for (const row of observations) if (!same(work(row.path), row.held) || !same(index(row.path), row.staged))
+      throw new TypeError('source receiving carrier changed before mutation: ' + row.path);
+    const restore = (selected, working) => {
+      if (!selected.length) return;
+      gitSync(repository, ['-c', 'submodule.recurse=false', '-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'restore', '--source=' + target, '--staged',
+        ...(working ? ['--worktree'] : []), '--pathspec-from-file=-', '--pathspec-file-nul'],
+      {input: selected.join('\0') + '\0', env: {GIT_LITERAL_PATHSPECS: '1'}});
+    };
+    restore(observations.filter(row => row.incoming?.mode !== '160000').map(row => row.path), true);
+    restore(summary.gitlinks, false);
+    for (const row of observations) {
+      if (!same(index(row.path), row.incoming)
+          || row.incoming?.mode !== '160000' && !same(work(row.path), row.incoming))
+        throw new TypeError('source receiving readback differs: ' + row.path);
+    }
+    publicHead();
+    gitSync(repository, ['update-ref', 'HEAD', target, sourceBase]);
+    if (head() !== target) throw new TypeError('source receiving HEAD readback differs');
+    return summary;
+  }});
 }

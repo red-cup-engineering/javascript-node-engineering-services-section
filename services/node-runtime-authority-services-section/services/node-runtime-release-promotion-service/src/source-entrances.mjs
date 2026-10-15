@@ -1,4 +1,4 @@
-import { existsSync, globSync } from "node:fs";
+import { existsSync, globSync, statSync } from "node:fs";
 import { isAbsolute, matchesGlob, relative, resolve, sep } from "node:path";
 
 // This source check rejects definite exclusions by an explicit files whitelist.
@@ -37,6 +37,7 @@ export function declaredNodeRuntimeEntries(root, manifest) {
     const files = path.includes("*") ? globSync(path, { cwd: root }).map(file => resolve(root, file)) : [absolute];
     if (!files.length) missing.push({ path: absolute, declaration: path, reason: "unmatched-export" });
     for (const file of files) {
+      if (existsSync(file) && statSync(file).isDirectory()) continue;
       if (!publicationAllows(root, manifest, file)) unpacked.push({ path: file, declaration: path, reason: "published-carrier-excluded-by-files" });
       if (!existsSync(file)) missing.push({ path: file, declaration: path, reason: "absent-carrier" });
       else if (/\.(?:[cm]?js|tsx?)$/u.test(file) && !/\.d\.[cm]?ts$/u.test(file)) entries.push(file);

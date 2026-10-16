@@ -34,7 +34,7 @@
     "@red-cup-engineering/markdown-engineering-services-section": "0.5.2"
   },
   "devDependencies": {
-    "@red-cup-engineering/jsnode-package-services-section": "workspace:*"
+    "@red-cup-engineering/jsnode-package-services-section": "0.2.4"
   },
   "scripts": {
     "check": "check-package-syntax",

@@ -4,7 +4,9 @@
   "description": "Parse JavaScript modules into a syntax tree and walk it, with no dependencies.",
   "type": "module",
   "license": "UNLICENSED",
-  "files": ["src"],
+  "files": [
+    "src"
+  ],
   "exports": {
     ".": "./src/javascript-parser.mjs",
     "./package.json": "./package.json"

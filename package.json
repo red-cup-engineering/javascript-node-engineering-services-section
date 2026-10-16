@@ -63,25 +63,25 @@
     "node": ">=24.2.0"
   },
   "dependencies": {
-    "@red-cup-engineering/computer-text-content-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/json-services-section": "workspace:*",
-    "@red-cup-engineering/markdown-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/read-javascript-file-export-documentation-service": "workspace:*",
-    "@red-cup-engineering/computer-code-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/computer-data-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/node-process-services-section": "workspace:*",
-    "@red-cup-engineering/metrologic": "workspace:*",
-    "@red-cup-engineering/jsonl-services-section": "workspace:*",
-    "@red-cup-engineering/json-schema-services-section": "workspace:*",
-    "@red-cup-engineering/computer-content-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/javascript-node-operation-service": "workspace:*",
-    "@red-cup-engineering/javascript-parser-service": "workspace:*",
-    "@red-cup-engineering/javascript-module-closure-service": "workspace:*"
+    "@red-cup-engineering/computer-text-content-engineering-services-section": "0.1.0",
+    "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "0.3.1",
+    "@red-cup-engineering/json-services-section": "0.4.0",
+    "@red-cup-engineering/markdown-engineering-services-section": "0.5.2",
+    "@red-cup-engineering/read-javascript-file-export-documentation-service": "0.1.5",
+    "@red-cup-engineering/computer-code-engineering-services-section": "0.1.2",
+    "@red-cup-engineering/computer-data-engineering-services-section": "0.2.0",
+    "@red-cup-engineering/node-process-services-section": "0.2.2",
+    "@red-cup-engineering/metrologic": "0.4.0",
+    "@red-cup-engineering/jsonl-services-section": "0.1.0",
+    "@red-cup-engineering/json-schema-services-section": "0.5.0",
+    "@red-cup-engineering/computer-content-engineering-services-section": "0.1.0",
+    "@red-cup-engineering/javascript-node-operation-service": "0.1.0",
+    "@red-cup-engineering/javascript-parser-service": "0.1.0",
+    "@red-cup-engineering/javascript-module-closure-service": "0.1.0"
   },
   "devDependencies": {
-    "@red-cup-engineering/jsonl-services-section": "workspace:*",
-    "@red-cup-engineering/metrologic": "workspace:*",
-    "@red-cup-engineering/jsnode-package-services-section": "workspace:*"
+    "@red-cup-engineering/jsonl-services-section": "0.1.0",
+    "@red-cup-engineering/metrologic": "0.4.0",
+    "@red-cup-engineering/jsnode-package-services-section": "0.2.4"
   }
 }

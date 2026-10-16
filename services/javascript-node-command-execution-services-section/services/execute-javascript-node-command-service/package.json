@@ -1,6 +1,6 @@
 {
   "name": "@red-cup-engineering/execute-javascript-node-command-service",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Executes one exact typed program request without a shell and returns its complete immutable receipt; also executes a request with this process's own stdio inherited by the child for a delegate that must hand its live stdin/stdout/stderr connection straight to another program.",
   "type": "module",
   "private": false,
@@ -19,7 +19,7 @@
     "data/records/schema"
   ],
   "dependencies": {
-    "@red-cup-engineering/javascript-node-services-section": "0.3.1"
+    "@red-cup-engineering/javascript-node-services-section": "0.3.2"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs",

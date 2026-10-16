@@ -1,6 +1,6 @@
 {
   "name": "@red-cup-engineering/services-section-form-services-section",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "The services-section-form topic section: folds a section's directory entries into a ServicesSectionForm record, founds a new services-section directory in that shape, reads a whole tree of sections into those records, derives a section's path from its name, and checks a ServicesSectionForm record for conformance against services-section-form.schema.json.",
   "type": "module",
   "private": false,
@@ -26,12 +26,12 @@
     "package.json"
   ],
   "dependencies": {
-    "@coesite-operations/enterprise-branding-services-section": "workspace:*",
-    "@red-cup-engineering/computer-filepath-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/computer-file-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/javascript-node-services-section": "workspace:*",
-    "@red-cup-engineering/json-schema-services-section": "workspace:*",
-    "@red-cup-engineering/markdown-engineering-services-section": "workspace:*"
+    "@red-cup-engineering/computer-filepath-engineering-services-section": "0.1.0",
+    "@red-cup-engineering/computer-file-engineering-services-section": "0.4.0",
+    "@red-cup-engineering/json-schema-services-section": "0.5.0",
+    "@coesite-operations/enterprise-branding-services-section": "0.1.3",
+    "@red-cup-engineering/javascript-node-services-section": "0.3.2",
+    "@red-cup-engineering/markdown-engineering-services-section": "0.5.2"
   },
   "devDependencies": {
     "@red-cup-engineering/jsnode-package-services-section": "workspace:*"

@@ -1,0 +1,17 @@
+{
+  "name": "@red-cup-engineering/javascript-parser-service",
+  "version": "0.1.0",
+  "description": "Parse JavaScript modules into a syntax tree and walk it, with no dependencies.",
+  "type": "module",
+  "license": "UNLICENSED",
+  "files": ["src"],
+  "exports": {
+    ".": "./src/javascript-parser.mjs",
+    "./package.json": "./package.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/computer-code-engineering-services-section.git",
+    "directory": "services/javascript-engineering-services-section/services/javascript-node-services-section/services/javascript-parser-service"
+  }
+}

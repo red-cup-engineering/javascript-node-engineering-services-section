@@ -75,7 +75,9 @@
     "@red-cup-engineering/jsonl-services-section": "workspace:*",
     "@red-cup-engineering/json-schema-services-section": "workspace:*",
     "@red-cup-engineering/computer-content-engineering-services-section": "workspace:*",
-    "@red-cup-engineering/javascript-node-operation-service": "workspace:*"
+    "@red-cup-engineering/javascript-node-operation-service": "workspace:*",
+    "@red-cup-engineering/javascript-parser-service": "workspace:*",
+    "@red-cup-engineering/javascript-module-closure-service": "workspace:*"
   },
   "devDependencies": {
     "@red-cup-engineering/jsonl-services-section": "workspace:*",

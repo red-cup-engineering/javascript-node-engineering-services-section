@@ -18,6 +18,42 @@ const name = "@red-cup-engineering/organizing";
 const version = "0.3.4";
 const integrity = "sha512-" + Buffer.alloc(64, 7).toString("base64");
 
+async function captureExecution(file, args, options) {
+  try {
+    return { status: 0, signal: null, killed: false, ...await execute(file, args, options) };
+  } catch (error) {
+    return { status: error.code, signal: error.signal ?? null, killed: error.killed ?? false,
+      stdout: error.stdout ?? "", stderr: error.stderr ?? "" };
+  }
+}
+
+function assertNormalPolicyRefusal(result) {
+  assert.equal(result.signal, null, "policy refusal must terminate without a signal");
+  assert.equal(result.killed, false, "policy refusal must not be killed or timed out");
+  assert.equal(result.status, 1, "policy refusal must have PNPM's normal numeric exit code 1");
+  assert.match(result.stdout + result.stderr, /ERR_PNPM_NO_MATURE_MATCHING_VERSION/);
+}
+
+test("abnormal termination cannot qualify as native policy refusal", async t => {
+  const marker = 'console.log("ERR_PNPM_NO_MATURE_MATCHING_VERSION");';
+  for (const [label, source, options] of [
+    ["timeout", marker + "setInterval(() => {}, 1000);", { timeout: 1000 }],
+    ["signal", marker + 'process.kill(process.pid, "SIGTERM");', {}],
+    ["maxBuffer", marker + 'console.log("x".repeat(8192));', { maxBuffer: 1024 }],
+  ]) {
+    await t.test(label, async () => {
+      const result = await captureExecution(process.execPath, ["-e", source], options);
+      assert.match(result.stdout + result.stderr, /ERR_PNPM_NO_MATURE_MATCHING_VERSION/);
+      if (label === "timeout") assert.equal(result.killed, true);
+      if (label === "signal") assert.equal(result.signal, "SIGTERM");
+      if (label === "maxBuffer") assert.equal(result.status, "ERR_CHILD_PROCESS_STDIO_MAXBUFFER");
+      assert.throws(() => assertNormalPolicyRefusal(result), { code: "ERR_ASSERTION" });
+      t.diagnostic(JSON.stringify({ label, status: result.status, signal: result.signal,
+        killed: result.killed, qualifiedAsPolicyRefusal: false }));
+    });
+  }
+});
+
 // This tests PNPM's supported CLI and publication's supplied command projection.
 // Registry metadata and time are controlled inputs; no actual Organizing carrier
 // is downloaded and no application installation or first-party admission occurs.
@@ -62,35 +98,32 @@ test("publication preparation retains native PNPM age policy", { skip: !enabled 
       const command = packageManagerInstallCommand("pnpm", registry, "update-lock", { cacheRoot: join(project, "cache") });
       assert.equal(command.command, "pnpm");
       assert.equal(command.arguments.some(value => /minimumReleaseAge|minimum-release-age/.test(value)), false);
-      let result;
-      try {
-        result = { status: 0, ...await execute(process.execPath,
+      const result = await captureExecution(process.execPath,
           ["--import", clock, resolve(pnpmEntry), ...command.arguments, "--lockfile-only", "--ignore-scripts", "--reporter=append-only"],
           { cwd: project, timeout: 45_000, maxBuffer: 2 * 1024 * 1024,
             env: { PATH: process.env.PATH, HOME: home, XDG_CONFIG_HOME: home,
-              CI: "true", npm_config_userconfig: userConfig, npm_config_globalconfig: userConfig } }) };
-      } catch (error) {
-        result = { status: error.code, stdout: error.stdout ?? "", stderr: error.stderr ?? "" };
-      }
+              CI: "true", npm_config_userconfig: userConfig, npm_config_globalconfig: userConfig } });
       const output = result.stdout + result.stderr;
       assert.equal(await readFile(join(project, "pnpm-workspace.yaml"), "utf8"), policy);
       assert.equal(await readFile(join(project, "package.json"), "utf8"), manifest);
       assert.equal(await readFile(join(project, ".npmrc"), "utf8"), npmrc);
       assert.doesNotMatch(output, /Added .*minimumReleaseAgeExclude/);
       if (admitted) {
+        assert.equal(result.signal, null);
+        assert.equal(result.killed, false);
         assert.equal(result.status, 0, output);
         const lock = await readFile(join(project, "pnpm-lock.yaml"), "utf8");
         assert.match(lock, /specifier: 0\.3\.4\s+version: 0\.3\.4/);
         assert.ok(lock.includes(integrity));
         assert.ok(lock.includes("@red-cup-engineering/organizing@0.3.4"));
       } else {
-        assert.notEqual(result.status, 0, output);
-        assert.match(output, /ERR_PNPM_NO_MATURE_MATCHING_VERSION/);
+        assertNormalPolicyRefusal(result);
         await assert.rejects(access(join(project, "pnpm-lock.yaml")), { code: "ENOENT" });
       }
       await assert.rejects(access(join(project, "node_modules")), { code: "ENOENT" });
       t.diagnostic(JSON.stringify({ label, pnpm: "11.28.5", published, observedAt: new Date(now).toISOString(),
-        minimumReleaseAge: 1440, nativeStatus: result.status, selected: admitted ? `${name}@${version}` : null,
+        minimumReleaseAge: 1440, nativeStatus: result.status, signal: result.signal, killed: result.killed,
+        selected: admitted ? `${name}@${version}` : null,
         policyUnchanged: true, applicationInstalled: false }));
     });
   }

@@ -4,7 +4,7 @@ import {
   TYPED_OPERATION_REFUSAL_KIND,
   TYPED_OPERATION_RESULT_KIND,
   typedOperationRequestType,
-} from "@red-cup-engineering/signcell/typed-operation-message";
+} from "@red-cup-engineering/computer-code-engineering-services-section/typed-operation-message";
 
 const CODECS = Object.freeze({
   json: Object.freeze({
@@ -33,7 +33,7 @@ function resultMessage(requestId, outputCodec, output) {
  * composition boundary every content-typed engine (text, markdown, and so
  * on) dispatches through rather than reimplementing its own admission,
  * codec, and refusal handling: it admits the request against
- * computer-data-engine's own typed-operation-message contract, decodes and
+ * Computer Code's own typed-operation-message contract, decodes and
  * encodes by the request's declared codec, invokes the registered handler,
  * and reports every failure as a typed-operation-refusal instead of
  * throwing.

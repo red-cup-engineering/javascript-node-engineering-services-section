@@ -1,4 +1,4 @@
-import { invokeTypedOperation } from "./invoke-typed-operation.mjs";
+import { invokeTypedOperation } from "@red-cup-engineering/computer-code-engineering-services-section/typed-operation-invoke";
 
 /**
  * Invoke one text-tier operation. This does not redefine typed-operation

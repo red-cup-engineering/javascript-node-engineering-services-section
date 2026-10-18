@@ -3,6 +3,11 @@
   "version": "0.2.2",
   "type": "module",
   "description": "Shared Node process boundary helpers: argv, environment, clock, entropy, stdio, command-result interpretation and lifecycle-record projection (execution itself is @red-cup-engineering/execute-javascript-node-command-service's job), config-file/data-root resolution, and service lifecycle events/records.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/computer-code-engineering-services-section.git",
+    "directory": "services/javascript-engineering-services-section/services/javascript-node-services-section/services/node-process-services-section"
+  },
   "license": "MIT",
   "publishConfig": {
     "access": "public"

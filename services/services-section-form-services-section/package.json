@@ -2,6 +2,11 @@
   "name": "@red-cup-engineering/services-section-form-services-section",
   "version": "0.1.2",
   "description": "The services-section-form topic section: folds a section's directory entries into a ServicesSectionForm record, founds a new services-section directory in that shape, reads a whole tree of sections into those records, derives a section's path from its name, and checks a ServicesSectionForm record for conformance against services-section-form.schema.json.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/computer-code-engineering-services-section.git",
+    "directory": "services/javascript-engineering-services-section/services/javascript-node-services-section/services/services-section-form-services-section"
+  },
   "type": "module",
   "private": false,
   "license": "MIT",

@@ -2,6 +2,11 @@
   "name": "@red-cup-engineering/pnpm-workspace-fabrication-service",
   "version": "0.0.0",
   "description": "Fabricates an explicitly ordered pnpm workspace as a customer artifact without granting workspace authority over the provider organism.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/computer-code-engineering-services-section.git",
+    "directory": "services/javascript-engineering-services-section/services/javascript-node-services-section/services/jsnode-packaging-services-section/services/pnpm-services-section/services/pnpm-workspace-services-section/services/pnpm-workspace-fabrication-service"
+  },
   "type": "module",
   "private": false,
   "license": "MIT",

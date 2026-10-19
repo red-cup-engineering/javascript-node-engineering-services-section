@@ -1,0 +1,40 @@
+[submodule "javascript-node-operation-engineering-services-section"]
+	path = services/javascript-node-operation-engineering-services-section
+	url = https://github.com/red-cup-engineering/javascript-node-operation-engineering-services-section.git
+	branch = main
+[submodule "execute-javascript-node-command-service"]
+	path = services/javascript-node-command-execution-services-section/services/execute-javascript-node-command-service
+	url = https://github.com/red-cup-engineering/execute-javascript-node-command-service.git
+	branch = main
+[submodule "services-section-form-services-section"]
+	path = services/services-section-form-services-section
+	url = https://github.com/red-cup-engineering/services-section-form-services-section.git
+	branch = main
+[submodule "node-runtime-authority-services-section"]
+	path = services/node-runtime-authority-services-section
+	url = https://github.com/red-cup-engineering/node-runtime-authority-services-section.git
+	branch = main
+[submodule "node-process-services-section"]
+	path = services/node-process-services-section
+	url = https://github.com/red-cup-engineering/node-process-services-section.git
+	branch = main
+[submodule "jsnode-packaging-services-section"]
+	path = services/jsnode-packaging-services-section
+	url = https://github.com/red-cup-engineering/jsnode-packaging-services-section.git
+	branch = main
+[submodule "jsnode-package-vulnerability-triage-services-section"]
+	path = services/jsnode-package-vulnerability-triage-services-section
+	url = https://github.com/red-cup-engineering/jsnode-package-vulnerability-triage-services-section.git
+	branch = main
+[submodule "javascript-parser-service"]
+	path = services/javascript-parser-service
+	url = https://github.com/red-cup-engineering/javascript-parser-service.git
+	branch = main
+[submodule "javascript-node-operation-service"]
+	path = services/javascript-node-operation-service
+	url = https://github.com/red-cup-engineering/javascript-node-operation-service.git
+	branch = main
+[submodule "javascript-module-closure-service"]
+	path = services/javascript-module-closure-service
+	url = https://github.com/red-cup-engineering/javascript-module-closure-service.git
+	branch = main

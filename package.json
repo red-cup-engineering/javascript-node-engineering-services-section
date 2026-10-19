@@ -1,6 +1,6 @@
 {
   "name": "@red-cup-engineering/javascript-node-services-section",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "type": "module",
   "description": "Node.js execution of schema-bound operations and shared command transports.",
   "repository": {
@@ -72,7 +72,7 @@
     "@red-cup-engineering/json-services-section": "0.4.0",
     "@red-cup-engineering/markdown-engineering-services-section": "0.5.2",
     "@red-cup-engineering/read-javascript-file-export-documentation-service": "0.1.5",
-    "@red-cup-engineering/computer-code-engineering-services-section": "0.2.0",
+    "@red-cup-engineering/computer-code-engineering-services-section": "0.2.1",
     "@red-cup-engineering/computer-data-engineering-services-section": "0.2.0",
     "@red-cup-engineering/node-process-services-section": "0.2.2",
     "@red-cup-engineering/metrologic": "0.4.0",

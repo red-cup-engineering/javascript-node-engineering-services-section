@@ -5,8 +5,7 @@
   "description": "Node.js execution of schema-bound operations and shared command transports.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/red-cup-engineering/computer-code-engineering-services-section.git",
-    "directory": "services/javascript-engineering-services-section/services/javascript-node-services-section"
+    "url": "git+https://github.com/red-cup-engineering/javascript-node-services-section.git"
   },
   "exports": {
     "./operation": "./src/operation.mjs",

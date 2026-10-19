@@ -2,12 +2,12 @@
 ## Requirements
 - `import-specifiers-listed`: The operation returns a NodeBuiltinUsageReading record listing every `node:`-prefixed import declaration in the source, each with its line, the builtin specifier, and its named/default/namespace local bindings.
 - `call-sites-with-line-and-form`: The operation walks the whole source (not only top-level statements) and returns every call site whose callee resolves to an imported Node built-in — by direct identifier for a named import, or by property access for a namespace or default import — each with its line number and its exact call-expression source text (`form`).
-- `mapping-id-or-null`: Each call site carries the `mappingId` from an embedded builtin.importedName lookup table mirroring the 2026-09-04 node-builtin-to-house-hand mapping record, or `null` when the pair is not in the table.
+- `mapping-id-or-null`: Each call site carries the `mappingId` from an embedded builtin.importedName lookup table mirroring the `2026-09-04` node-builtin-to-house-hand mapping record, or `null` when the pair is not in the table.
 - `awaited-flag`: Each call site records whether it is the operand of an `await` expression, so a later pass can tell an already-async call site from a synchronous one without re-parsing.
 - `pure-reading`: The operation performs no filesystem access; it reads only the `text` and `path` fields of its request.
 ## Prohibitions
-- `missing-text-or-path-refusal`: The operation must refuse a request whose `text` is not a string, or whose `path` does not end in `scripts/<name>.mjs` (at any directory depth).
-- `no-mapping-invention`: The operation must not invent a mapping id for a builtin.importedName pair absent from its embedded table; such a pair reports `mappingId: null`.
+- `missing-text-or-path-refusal`: The operation must refuse a request whose `text` is not a string, or whose `path` does not end in `scripts/<name>.mjs` (at any directory depth). [claims: malformed-input-outside-domain]
+- `no-mapping-invention`: The operation must not invent a mapping id for a builtin.importedName pair absent from its embedded table; such a pair reports `mappingId: null`. [claims: mapping-table-is-the-only-source]
 ## Laws
 - `fabricate-do-not-hand-write` | 561 Group working discipline, dispatch-agents skill | 2026-09-04 | .claude/skills/dispatch-agents/SKILL.md | Applies to the imports of every new script and source module in the tree. | A direct node:fs, node:path, or node:child_process import where a house service exists is a defect a lot must not ship; this operation is what measures how many such imports remain and whether an exact house-hand mapping already exists for each.
 - `primitives-exist-once` | 561 Group working discipline | 2026-08-30 | CLAUDE.md | Applies to every Node builtin call site this operation finds a mapping id for. | A call site with a non-null mappingId is evidence the tree still hand-rolls a primitive the registry already owns once.
@@ -16,6 +16,10 @@
 - `typescript-compiler-api` | TypeScript | 5.9.3 | https://github.com/microsoft/TypeScript/wiki/Architectural-Overview | Applies to the AST parse and traversal used to find import declarations and call expressions. | The 5.9.3 pin is fixed because the classic Compiler API surface this operation calls (`ts.createSourceFile`, `ts.forEachChild`, node type guards) is dropped starting with TypeScript 7.
 ## Open questions
 none
+## Claims
+- `dep-typescript` | measured | dependency | typescript@5.9.3 is published on the Group registry | none | data/records/2026-10-19-work-order-evidence/npm-view-typescript-5-9-3.json | sha256:46cbd7f43f23e3a67f4931608efffb6375741fb8a095c619ff69f75283a19c87 | npm view of typescript@5.9.3 returned its name, version and integrity (2026-10-19)
+- `malformed-input-outside-domain` | derived | world | A request or field not of its declared type lies outside the operation's input domain | none | constraint:node-esm-operation; citation:Red Cup reconcile-typed-boundaries skill, a boundary admits only its declared type | Refusing an out-of-domain input is the typed boundary's own behavior, not a further choice
+- `mapping-table-is-the-only-source` | derived | world | A mapping id has no source other than the embedded lookup table | none | requirement:mapping-id-or-null | The requirement defines mappingId as the embedded table's value or null, so a pair absent from the table has no id to report
 ## Package
 ```json
 {"packageName":"@red-cup-engineering/read-node-builtin-usage-service","packageVersion":"0.1.1","license":"MIT","dependencies":{"typescript":"5.9.3"},"devDependencies":{}}

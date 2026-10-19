@@ -18,9 +18,9 @@ test("exportsSubpath matches an exact key and a single-star pattern, and refuses
 function makeTree() {
   const root = mkdtempSync(join(tmpdir(), "audit-phantom-"));
   const mk = (path, text) => { mkdirSync(join(root, path, ".."), { recursive: true }); writeFileSync(join(root, path), text); };
-  mk("lib/a/pkg-with-exports/package.json", JSON.stringify({ exports: { "./thing": "./src/thing.mjs" } }));
+  mk("lib/a/pkg-with-exports/package.json", JSON.stringify({ name: "@red-cup-engineering/pkg-with-exports", exports: { "./thing": "./src/thing.mjs" } }));
   mk("lib/a/pkg-with-exports/src/thing.mjs", "export const thing = 1;\n");
-  mk("lib/a/pkg-no-exports/package.json", JSON.stringify({}));
+  mk("lib/a/pkg-no-exports/package.json", JSON.stringify({ name: "@red-cup-engineering/pkg-no-exports" }));
   mk("lib/a/pkg-no-exports/src/real.mjs", "export const real = 1;\n");
   mk(
     "lib/a/importer/src/a.mjs",

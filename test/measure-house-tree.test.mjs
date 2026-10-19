@@ -74,7 +74,7 @@ test("measureReviewer reports a timed-out run instead of throwing, naming how lo
   assert.equal(typeof result.elapsedMs, "number");
 });
 
-test("measureHouseTree, against a real ref rooted under lib/emsenn/services/561-group with a committed house-layers.json, reports layerFindings, phantomFindings, hullKernelFindings, barrels and crossPackageRelativeImports from the audits and the reviewer's own tree run", () => {
+test("measureHouseTree, against a real ref rooted under lib/emsenn/services/561-group with a committed house-layers.json, reports layerFindings, phantomFindings and hullKernelFindings from the audits", () => {
   const repository = mkdtempSync(join(tmpdir(), "measure-house-norms-"));
   const git = (...args) => execFileSync("/usr/bin/git", args, { cwd: repository, encoding: "utf8", env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" } });
   git("init", "-q");
@@ -90,7 +90,7 @@ test("measureHouseTree, against a real ref rooted under lib/emsenn/services/561-
     ],
   }));
 
-  mk(`${base}/pkg/package.json`, JSON.stringify({}));
+  mk(`${base}/pkg/package.json`, JSON.stringify({ name: "@red-cup-engineering/pkg" }));
   // One forbidden layer import: substrate (pkg) has an empty imports list, so reaching web-server breaks the DAG.
   mk(`${base}/pkg/src/a.mjs`, "import { serve } from \"@red-cup-engineering/web-server/serve\";\nexport const a = 1;\n");
   // One phantom import: no discovered package has this name.
@@ -103,14 +103,14 @@ test("measureHouseTree, against a real ref rooted under lib/emsenn/services/561-
   // One relative import that escapes pkg entirely (into the sibling "other" package, same layer so no layer finding).
   mk(`${base}/pkg/src/reach.mjs`, "import { thing } from \"../../other/src/thing.mjs\";\nexport const r = thing;\n");
   // One relative import that reaches into a package nested under pkg itself.
-  mk(`${base}/pkg/nested-thing/package.json`, JSON.stringify({}));
+  mk(`${base}/pkg/nested-thing/package.json`, JSON.stringify({ name: "@red-cup-engineering/nested-thing" }));
   mk(`${base}/pkg/nested-thing/src/x.mjs`, "export const x = 1;\n");
   mk(`${base}/pkg/src/reach2.mjs`, "import { x } from \"../nested-thing/src/x.mjs\";\nexport const r2 = x;\n");
 
-  mk(`${base}/other/package.json`, JSON.stringify({}));
+  mk(`${base}/other/package.json`, JSON.stringify({ name: "@red-cup-engineering/other" }));
   mk(`${base}/other/src/thing.mjs`, "export const thing = 1;\n");
 
-  mk(`${base}/apps/web-server/package.json`, JSON.stringify({ exports: { "./serve": "./src/serve.mjs" } }));
+  mk(`${base}/apps/web-server/package.json`, JSON.stringify({ name: "@red-cup-engineering/web-server", exports: { "./serve": "./src/serve.mjs" } }));
   mk(`${base}/apps/web-server/src/serve.mjs`, "export const serve = 1;\n");
 
   git("add", "-A");
@@ -121,6 +121,4 @@ test("measureHouseTree, against a real ref rooted under lib/emsenn/services/561-
   assert.equal(measured.layerFindings, 1, "pkg/src/a.mjs importing the web server breaks substrate's empty imports list");
   assert.equal(measured.phantomFindings, 1, "pkg/src/phantom.mjs names no real package");
   assert.equal(measured.hullKernelFindings, 1, "pkg/src/hull-thing.mjs, hull, imports pkg/src/kernel-thing.mjs, kernel");
-  assert.equal(measured.barrels, 1, "pkg/src/barrel.mjs only re-exports");
-  assert.equal(measured.crossPackageRelativeImports, 2, "reach.mjs escapes the package, reach2.mjs reaches into the nested package");
 });

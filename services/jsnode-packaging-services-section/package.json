@@ -1,5 +1,0 @@
-{
-  "name": "@red-cup-engineering/jsnode-packaging-services-section",
-  "description": "Holds the services for turning Node.js code into npm packages. Use when working on how packages are named, versioned, built, or distributed.",
-  "private": true
-}

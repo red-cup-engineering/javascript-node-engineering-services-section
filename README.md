@@ -42,3 +42,9 @@ admits it. Failed gluing remains an explicit obstruction.
 
 NOG lives at `apps/nog` and is the first local app to expose this composition
 description directly.
+
+When `HOUSE_PACKAGE_BINDINGS` names an explicit supplier record, registration
+resolves that file once and passes its absolute path to descendant processes.
+Git hooks and other children can change directories while retaining the same
+bounded suppliers. Missing or invalid records still refuse before application
+execution; this does not enable repository discovery.

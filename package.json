@@ -86,5 +86,10 @@
     "@red-cup-engineering/jsonl-services-section": "0.1.0",
     "@red-cup-engineering/metrologic": "0.4.0",
     "@red-cup-engineering/jsnode-package-services-section": "0.2.4"
+  },
+  "license": "MIT",
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
   }
 }

@@ -1,0 +1,11 @@
+{
+  "type": "SourceMaintenanceCapabilityContract",
+  "version": 1,
+  "owner": "red-cup-engineering/javascript-node-services-section",
+  "work": "ni:///sha-256;ialMg599Vra1Ot5YHG9fw2IZhpk0WzJsyVVYCZ-LsFs",
+  "requirement": "Source receiving must select exact declared owner suppliers without a whole-tree discovery, private test loader or wrong-graph installation.",
+  "input": "Private HOUSE_PACKAGE_BINDINGS names a bounded HousePackageBindings@1 record: exact type/version/packages, at most200 entries, each exact name/version/canonical absolute directory. All manifests agree before selection changes.",
+  "behavior": "When bindings supplied, initialize reads only named manifests and never invokes discovery. Invalid/duplicate/wrong-version bindings refuse atomically. Bound exports remain inside selected package and undeclared exports refuse. Omission preserves original discovery method.",
+  "verification": "bounded-house-suppliers test plus original executor, File, OAuth and CSE receiving under this existing registration capability.",
+  "release": "Source-stage proposal only, no deployed selection."
+}

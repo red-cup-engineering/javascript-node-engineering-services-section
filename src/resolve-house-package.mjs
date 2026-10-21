@@ -6,8 +6,8 @@
  *
  * Registered by `scripts/register-house-resolver.mjs` (`node --import`).
  */
-import { readFileSync } from "node:fs";
-import { join, resolve as resolvePath } from "node:path";
+import { readFileSync, realpathSync } from "node:fs";
+import { isAbsolute, join, resolve as resolvePath, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { discoverHousePackages } from "./discover-house-packages.mjs";
 
@@ -17,10 +17,34 @@ let root = null;
 let packages = null;
 const manifests = new Map();
 
-export function initialize({ root: repositoryRoot = process.cwd() } = {}) {
-  const discovered = discoverHousePackages(repositoryRoot);
-  root = discovered.root;
-  packages = discovered.packages;
+let bounded = false;
+export function initialize({ root: repositoryRoot = process.cwd(), bindings } = {}) {
+  if (bindings === undefined) {
+    const discovered = discoverHousePackages(repositoryRoot);
+    root = discovered.root; packages = discovered.packages; bounded = false; manifests.clear();
+    return;
+  }
+  if (!bindings || typeof bindings !== "object" || Array.isArray(bindings) || Object.keys(bindings).sort().join(",") !== "packages,type,version"
+    || bindings.type !== "HousePackageBindings" || bindings.version !== 1
+    || !Array.isArray(bindings.packages) || bindings.packages.length > 200)
+    throw new TypeError("bindings must be HousePackageBindings@1 with at most 200 exact suppliers");
+  const selected = Object.create(null), admitted = new Map();
+  for (const entry of bindings.packages) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry) || Object.keys(entry).sort().join(",") !== "directory,name,version"
+      || typeof entry.name !== "string" || !HOUSE_SCOPES.some(scope => entry.name.startsWith(scope))
+      || typeof entry.version !== "string" || !entry.version
+      || typeof entry.directory !== "string" || !isAbsolute(entry.directory)
+      || resolvePath(entry.directory) !== entry.directory || Object.hasOwn(selected, entry.name))
+      throw new TypeError("each supplier must name one absolute directory and exact version");
+    const directory = realpathSync(entry.directory);
+    const pkg = JSON.parse(readFileSync(join(directory, "package.json"), "utf8"));
+    if (pkg.name !== entry.name || pkg.version !== entry.version)
+      throw new TypeError("selected supplier manifest differs from its binding");
+    selected[entry.name] = directory; admitted.set(directory, pkg);
+  }
+  root = "/"; packages = selected; bounded = true;
+  manifests.clear();
+  for (const [directory, pkg] of admitted) manifests.set(directory, pkg);
 }
 
 /** `@scope/name/sub/path` → [`@scope/name`, `./sub/path`]; bare package → `.` */
@@ -70,7 +94,11 @@ export async function resolve(specifier, context, next) {
   const directory = resolvePath(root, relative);
   const pkg = manifest(directory);
   let file = resolveExports(pkg.exports, subpath);
+  if (bounded && pkg.exports !== undefined && file === undefined)
+    throw Object.assign(new Error("selected supplier does not export the requested path"), { code: "ERR_PACKAGE_PATH_NOT_EXPORTED" });
   if (file === undefined && subpath === ".") file = pkg.module ?? pkg.main ?? "./index.mjs";
   if (file === undefined) file = subpath;
-  return { url: pathToFileURL(join(directory, file)).href, shortCircuit: true };
+  const selected = resolvePath(directory, file);
+  if (bounded && !selected.startsWith(directory + sep)) throw new TypeError("selected supplier export escapes its package");
+  return { url: pathToFileURL(selected).href, shortCircuit: true };
 }

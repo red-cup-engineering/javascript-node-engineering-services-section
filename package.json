@@ -1,11 +1,11 @@
 {
-  "name": "@red-cup-engineering/javascript-node-services-section",
+  "name": "@red-cup-engineering/javascript-node-engineering-services-section",
   "version": "0.4.1",
   "type": "module",
   "description": "Node.js execution of schema-bound operations and shared command transports.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/red-cup-engineering/javascript-node-services-section.git"
+    "url": "git+https://github.com/red-cup-engineering/javascript-node-engineering-services-section.git"
   },
   "exports": {
     "./operation": "./src/operation.mjs",

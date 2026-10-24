@@ -8,23 +8,23 @@
 	branch = main
 [submodule "services-section-form-services-section"]
 	path = services/services-section-form-services-section
-	url = https://github.com/red-cup-engineering/services-section-form-services-section.git
+	url = https://github.com/red-cup-engineering/services-section-form-engineering-services-section.git
 	branch = main
 [submodule "node-runtime-authority-services-section"]
 	path = services/node-runtime-authority-services-section
-	url = https://github.com/red-cup-engineering/node-runtime-authority-services-section.git
+	url = https://github.com/red-cup-engineering/node-runtime-authority-engineering-services-section.git
 	branch = main
 [submodule "node-process-services-section"]
 	path = services/node-process-services-section
-	url = https://github.com/red-cup-engineering/node-process-services-section.git
+	url = https://github.com/red-cup-engineering/node-process-engineering-services-section.git
 	branch = main
 [submodule "jsnode-packaging-services-section"]
 	path = services/jsnode-packaging-services-section
-	url = https://github.com/red-cup-engineering/jsnode-packaging-services-section.git
+	url = https://github.com/red-cup-engineering/jsnode-packaging-engineering-services-section.git
 	branch = main
 [submodule "jsnode-package-vulnerability-triage-services-section"]
 	path = services/jsnode-package-vulnerability-triage-services-section
-	url = https://github.com/red-cup-engineering/jsnode-package-vulnerability-triage-services-section.git
+	url = https://github.com/red-cup-engineering/jsnode-package-vulnerability-triage-engineering-services-section.git
 	branch = main
 [submodule "javascript-parser-service"]
 	path = services/javascript-parser-service

@@ -6,7 +6,7 @@
  * whatever the working directory is, rather than depending on a maintained
  * location registry.
  */
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { register } from "node:module";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,6 +19,13 @@ function repositoryRoot(start) {
   }
 }
 
-register(new URL("../src/resolve-house-package.mjs", import.meta.url), {
-  data: { root: process.env.HOUSE_ROOT ?? repositoryRoot(dirname(fileURLToPath(import.meta.url))) },
-});
+const bindingFile = process.env.HOUSE_PACKAGE_BINDINGS === undefined
+  ? undefined : realpathSync(process.env.HOUSE_PACKAGE_BINDINGS);
+if (bindingFile !== undefined && statSync(bindingFile).size > 1024 * 1024)
+  throw new RangeError("house supplier bindings exceed one MiB");
+const data = bindingFile === undefined
+  ? { root: process.env.HOUSE_ROOT ?? repositoryRoot(dirname(fileURLToPath(import.meta.url))) }
+  : { bindings: JSON.parse(readFileSync(bindingFile, "utf8")) };
+// Descendants inherit the same selected file even when they run from a Git scratch directory.
+if (bindingFile !== undefined) process.env.HOUSE_PACKAGE_BINDINGS = bindingFile;
+register(new URL("../src/resolve-house-package.mjs", import.meta.url), { data });

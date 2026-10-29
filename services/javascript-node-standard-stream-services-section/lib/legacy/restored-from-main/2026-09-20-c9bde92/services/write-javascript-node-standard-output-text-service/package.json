@@ -1,0 +1,24 @@
+{
+  "name": "@red-cup-engineering/write-javascript-node-standard-output-text-service",
+  "version": "0.2.1",
+  "description": "Writes one text carrier completely to a caller-supplied Node.js standard-output stream.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "exports": "./scripts/write-javascript-node-standard-output-text.mjs",
+  "files": [
+    "scripts",
+    "package.json"
+  ],
+  "scripts": {
+    "check": "node --check scripts/write-javascript-node-standard-output-text.mjs",
+    "test": "node --test test/*.test.mjs",
+    "pack:dry-run": "npm pack --dry-run --ignore-scripts"
+  },
+  "dependencies": {
+    "@red-cup-engineering/computer-data-engine": "0.11.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

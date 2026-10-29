@@ -1,0 +1,46 @@
+{
+  "name": "@red-cup-engineering/jsnode-topology",
+  "version": "0.2.1",
+  "type": "module",
+  "description": "Node.js packages as a meme-topology carrier: layer, exports, and dependencies as relational utterances; workspace-level sheaf settlement via induceJSNodeTopology.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/emsenn/jsnode-topology.git"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "clean": "rm -rf dist .tmp/test-dist",
+    "check": "tsc --noEmit",
+    "build": "npm run clean && tsc -p tsconfig.build.json",
+    "pretest": "npm run build && tsc -p tsconfig.test.json",
+    "test": "node --test \".tmp/test-dist/**/*.test.mjs\"",
+    "audit:boundary": "npm pack --dry-run",
+    "prepack": "npm run build"
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "package.json"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.mts",
+      "import": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@lenticule-science/metrologic": "file:../../../../../../../../../computer-systems-engineering-services-section/services/computer-math-system-services-section/apps/metrologic",
+    "@red-cup-engineering/feltos": "0.18.3",
+    "@red-cup-engineering/javascript-algebra": "0.1.0",
+    "@red-cup-engineering/sign-cell": "file:../../../../../../../../../computer-data-engineering-services-section/services/sign-cell-services-section"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "5.9.3"
+  },
+  "sideEffects": false
+}

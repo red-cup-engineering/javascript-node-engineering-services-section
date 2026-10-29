@@ -1,0 +1,27 @@
+{
+  "name": "@red-cup-engineering/read-javascript-node-standard-input-text-service",
+  "version": "0.2.1",
+  "description": "Reads one Node.js standard-input stream completely as UTF-8 text.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "exports": "./scripts/read-javascript-node-standard-input-text.mjs",
+  "bin": {
+    "read-javascript-node-standard-input-text": "scripts/read-javascript-node-standard-input-text.mjs"
+  },
+  "files": [
+    "scripts",
+    "package.json"
+  ],
+  "scripts": {
+    "check": "node --check scripts/read-javascript-node-standard-input-text.mjs",
+    "test": "node --test test/*.test.mjs",
+    "pack:dry-run": "npm pack --dry-run --ignore-scripts"
+  },
+  "dependencies": {
+    "@red-cup-engineering/computer-data-engine": "0.11.2"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

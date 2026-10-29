@@ -1,0 +1,43 @@
+{
+  "name": "@red-cup-engineering/check-hand-registered-operations-service",
+  "version": "0.1.1",
+  "description": "Reads one catalog module's source text and counts every statically\nmodule-named `yield Object.freeze({ module: \"...\", ... })` statement --\nthe hand-imported operation families the catalog registers from inside\nthe package rather than mounting from a FERN's admitted operations. A\n`yield` inside a loop over an externally supplied source never matches,\nbecause its `module` is a loop variable, not a literal string.",
+  "type": "module",
+  "private": false,
+  "license": "UNLICENSED",
+  "exports": {
+    ".": {
+      "types": "./types/check-hand-registered-operations.d.mts",
+      "import": "./scripts/check-hand-registered-operations.mjs",
+      "default": "./scripts/check-hand-registered-operations.mjs"
+    }
+  },
+  "bin": {
+    "check-hand-registered-operations": "scripts/check-hand-registered-operations.mjs"
+  },
+  "files": [
+    "scripts",
+    "README.md",
+    "package.json",
+    "types",
+    "tsconfig.types.json"
+  ],
+  "dependencies": {
+    "@red-cup-engineering/file-services": "0.4.0",
+    "@red-cup-engineering/javascript-node-services-section": "0.3.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "check": "node --check scripts/check-hand-registered-operations.mjs",
+    "test": "node --test test/*.test.mjs",
+    "pack:dry-run": "npm pack --dry-run --ignore-scripts",
+    "types": "tsc -p tsconfig.types.json",
+    "prepack": "npm run types",
+    "test:types": "tsc --strict --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 test/types/consumer.mts"
+  },
+  "engines": {
+    "node": ">=24.2.0"
+  }
+}

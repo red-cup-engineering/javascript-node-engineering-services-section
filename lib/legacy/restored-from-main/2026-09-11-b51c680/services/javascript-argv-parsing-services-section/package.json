@@ -1,0 +1,36 @@
+{
+  "name": "@red-cup-engineering/javascript-argv-parsing-services-section",
+  "version": "0.1.0",
+  "description": "JavaScript-host argument-vector parsing: reading a named flag's value, projecting the user-supplied tail past the runtime and program addresses, and parsing an argument vector against a Node-compatible option grammar.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "exports": {
+    "./parse-javascript-argv": "./scripts/parse-javascript-argv.mjs",
+    "./project-javascript-argv-tail": "./scripts/project-javascript-argv-tail.mjs"
+  },
+  "bin": {
+    "parse-javascript-argv": "scripts/parse-javascript-argv.mjs",
+    "project-javascript-argv-tail": "scripts/project-javascript-argv-tail.mjs"
+  },
+  "files": [
+    "scripts",
+    "package.json"
+  ],
+  "dependencies": {
+    "@red-cup-engineering/immutable-json-value-service": "0.1.1",
+    "@red-cup-engineering/javascript-node-services-section": "0.2.0",
+    "@red-cup-engineering/json-codec-service": "0.1.6",
+    "@red-cup-engineering/read-javascript-file-export-documentation-service": "0.1.1",
+    "@red-cup-engineering/read-javascript-node-standard-input-text-service": "0.2.1",
+    "@red-cup-engineering/write-javascript-node-standard-output-text-service": "0.2.1"
+  },
+  "scripts": {
+    "check": "node --check scripts/parse-javascript-argv.mjs && node --check scripts/project-javascript-argv-tail.mjs",
+    "test": "node --test test/*.test.mjs",
+    "pack:dry-run": "npm pack --dry-run --ignore-scripts"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

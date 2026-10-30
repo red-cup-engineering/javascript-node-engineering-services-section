@@ -1,0 +1,30 @@
+{
+  "name": "@red-cup-engineering/read-node-builtin-usage-service",
+  "version": "0.1.1",
+  "description": "Reads one JavaScript ESM script's source into a NodeBuiltinUsageReading record: every node: import specifier it declares, and every call site of an imported Node built-in with its line, exact form, whether it is awaited, and the node-builtin-to-house-hand mapping id it matches, or null when no exact mapping is known yet \u2014 a pure AST reading with no filesystem access.",
+  "type": "module",
+  "private": false,
+  "license": "MIT",
+  "exports": "./scripts/read-node-builtin-usage.mjs",
+  "bin": {
+    "read-node-builtin-usage": "scripts/read-node-builtin-usage.mjs"
+  },
+  "files": [
+    "scripts",
+    "README.md",
+    "package.json"
+  ],
+  "dependencies": {
+    "@red-cup-engineering/javascript-node-services-section": "0.2.0",
+    "typescript": "5.9.3"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "check": "node --check scripts/read-node-builtin-usage.mjs",
+    "test": "node --test test/*.test.mjs",
+    "pack:dry-run": "npm pack --dry-run --ignore-scripts"
+  },
+  "engines": {
+    "node": ">=24.2.0"
+  }
+}

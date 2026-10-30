@@ -1,0 +1,57 @@
+{
+  "name": "@emsenn/jsnode-content-computer",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Content computer for jsnode workspaces: LLM-written, gate-checked documentation cultivated bottom-up from a package's introspected surface — symbol references first, composed into explanations and a README. Our code formats and verifies; the model supplies prose.",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "bin": {
+    "jsnode-content-computer": "./dist/cli.mjs"
+  },
+  "scripts": {
+    "clean": "rm -rf dist .tmp/test-dist",
+    "check": "tsc --noEmit",
+    "build": "pnpm run clean && tsc -p tsconfig.build.json && node ../../scripts/package-boundary/copy-dmts-to-dts.mjs dist",
+    "test": "pnpm run build && tsc -p tsconfig.test.json && node --test \".tmp/test-dist/**/*.test.mjs\"",
+    "verify": "pnpm run check && pnpm run test",
+    "prepack": "pnpm run build"
+  },
+  "main": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs"
+    },
+    "./surface": {
+      "types": "./dist/surface.d.ts",
+      "import": "./dist/surface.mjs"
+    },
+    "./cycle": {
+      "types": "./dist/cycle.d.ts",
+      "import": "./dist/cycle.mjs"
+    },
+    "./cli": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@emsenn/content-computer": "0.0.1",
+    "@emsenn/content": "0.0.1",
+    "@red-cup-engineering/javascript-computer": "0.1.0",
+    "@emsenn/jsnode-computer": "0.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "typescript": "5.9.3"
+  },
+  "sideEffects": false
+}

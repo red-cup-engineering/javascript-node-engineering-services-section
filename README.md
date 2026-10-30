@@ -69,3 +69,7 @@ Node.js executes the effectful side of [LAGOON](https://github.com/red-cup-engin
 
 NOG lives at `apps/nog` and is the first local app to expose this composition
 description directly.
+
+## Earlier work
+
+- Restored files at `lib/legacy/2026-06-16-4a3582a` (restore commit 4a3582a); `lib/legacy/2026-06-17-0b8d657` (restore commit 0b8d657); `lib/legacy/2026-06-23-ff20882` (restore commit ff20882), from the 561-group/bare-cedar-fog history.

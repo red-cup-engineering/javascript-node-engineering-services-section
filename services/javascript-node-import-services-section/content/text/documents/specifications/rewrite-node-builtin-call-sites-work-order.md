@@ -6,13 +6,13 @@
 - `no-match-is-a-no-op`: When no call site resolves to the mapping's `builtin`/`importedName` pair, the operation returns the input `text` unchanged with `rewrittenCallSites` equal to the empty count (zero), `importAdded: null`, `importRemoved: null`.
 - `pure-rewrite`: The operation performs no filesystem access; it reads only `text` and `mapping` from its request and returns a new in-memory record.
 ## Prohibitions
-- `gap-mapping-refusal`: The operation must refuse (throw `TypeError`) a mapping whose `housePackage` or `houseFunction` is missing — a gap mapping has no house hand to rewrite to. [claims: rewrite-needs-a-house-target]
+- `gap-mapping-refusal`: The operation must refuse (throw `TypeError`) a mapping whose `housePackage` or `houseFunction` is missing — a gap mapping has no Group hand to rewrite to. [claims: rewrite-needs-a-house-target]
 - `async-mismatch-refusal`: The operation must refuse a mapping whose `builtinIsAsync` differs from `houseHandIsAsync` — this operation performs no await/promise-shape rewriting. [claims: rewrite-keeps-call-shape]
 - `unsupported-from-form-refusal`: The operation must refuse a mapping whose `fromForm` is not a single-rest-parameter call form (`name(...ident)`) — the only argument-shape transform this operation implements. [claims: rewrite-keeps-call-shape]
 - `no-byte-drift-elsewhere`: Characters outside a rewritten call site and the touched import text must be returned byte-identical to the input. [claims: rewrite-edits-only-matched-text]
 ## Laws
 - `fabricate-do-not-hand-write` | 561 Group working discipline, dispatch-agents skill | 2026-09-04 | .claude/skills/dispatch-agents/SKILL.md | Applies to this operation's own birth. | This codemod operation is fabricated through the jsnode fabrication line from this work order, never hand-written, so the tree's own house-hand migration does not itself start as an exception to the rule it enforces.
-- `primitives-exist-once` | 561 Group working discipline | 2026-08-30 | CLAUDE.md | Applies to every call site this operation rewrites. | A rewritten call site retires one more hand-rolled use of a Node builtin the registry already owns once as a house primitive.
+- `primitives-exist-once` | 561 Group working discipline | 2026-08-30 | CLAUDE.md | Applies to every call site this operation rewrites. | A rewritten call site retires one more hand-rolled use of a Node builtin the registry already owns once as a Group primitive.
 ## Standards
 - `node-esm-operation` | Node.js | v24.2.0+ | https://nodejs.org/docs/v24/api/esm.html | Applies to the .mjs operation, its import.meta.main guard, and downstream package-birth assays. | The package uses one executable ESM operation source file that is eligible for downstream staged package-birth assays.
 - `typescript-compiler-api` | TypeScript | 5.9.3 | https://github.com/microsoft/TypeScript/wiki/Architectural-Overview | Applies to the AST parse, traversal, and text-range edits used to find and rewrite call sites and import declarations. | The 5.9.3 pin is fixed because the classic Compiler API surface this operation calls (`ts.createSourceFile`, `ts.forEachChild`, node type guards, `getStart`/`getEnd`/`getText`) is dropped starting with TypeScript 7.
@@ -144,10 +144,10 @@ function applyEdits(text, edits) {
 }
 
 /**
- * Rewrites every call site of one node-builtin-to-house-hand mapping's builtin form in a JavaScript ESM source to the house form, adding the house import when absent and dropping the builtin import when it becomes unused — a pure text transform with no filesystem access.
+ * Rewrites every call site of one node-builtin-to-house-hand mapping's builtin form in a JavaScript ESM source to the Group form, adding the Group import when absent and dropping the builtin import when it becomes unused — a pure text transform with no filesystem access.
  * @param {object} request A record with `text` (complete JavaScript ESM source) and `mapping` (one entry from the 2026-09-04 node-builtin-to-house-hand mapping record, carrying `builtin`, `importedName`, `fromForm`, `housePackage`, `houseFunction`, `builtinIsAsync`, `houseHandIsAsync`).
  * @returns {object} A record with `text` (the rewritten source), `rewrittenCallSites` (count), `importAdded` (`{source, name}` or `null`), `importRemoved` (`{source, name}` or `null`).
- * @throws {TypeError} When `text` is not a string, `mapping` is not an object, `mapping.housePackage`/`mapping.houseFunction` is missing (a gap mapping has no house hand to rewrite to), `mapping.builtinIsAsync` differs from `mapping.houseHandIsAsync`, or `mapping.fromForm` is not a single-rest-parameter call form (`name(...ident)`).
+ * @throws {TypeError} When `text` is not a string, `mapping` is not an object, `mapping.housePackage`/`mapping.houseFunction` is missing (a gap mapping has no Group hand to rewrite to), `mapping.builtinIsAsync` differs from `mapping.houseHandIsAsync`, or `mapping.fromForm` is not a single-rest-parameter call form (`name(...ident)`).
  * @throws {SyntaxError} When the carried JavaScript does not parse (propagated from the TypeScript source-file parse).
  */
 export function rewriteNodeBuiltinCallSites(request) {
@@ -159,10 +159,10 @@ export function rewriteNodeBuiltinCallSites(request) {
     throw new TypeError("mapping must carry builtin, importedName, and fromForm strings");
   }
   if (typeof housePackage !== "string" || typeof houseFunction !== "string") {
-    throw new TypeError("mapping has no house hand to rewrite to (housePackage/houseFunction missing)");
+    throw new TypeError("mapping has no Group hand to rewrite to (housePackage/houseFunction missing)");
   }
   if (Boolean(builtinIsAsync) !== Boolean(houseHandIsAsync)) {
-    throw new TypeError("mapping's builtin and house hand differ in async shape; unsupported by this operation");
+    throw new TypeError("mapping's builtin and Group hand differ in async shape; unsupported by this operation");
   }
   if (!FROM_FORM_PATTERN.test(fromForm)) {
     throw new TypeError("mapping.fromForm must be a single-rest-parameter call form: name(...ident)");
@@ -265,7 +265,7 @@ export function rewriteNodeBuiltinCallSites(request) {
 if (import.meta.main) {
   if (process.argv.includes("--help")) {
     process.stdout.write(
-      "rewriteNodeBuiltinCallSites — Rewrites every call site of one node-builtin-to-house-hand mapping's builtin form in a JavaScript ESM source to the house form, adding the house import when absent and dropping the builtin import when it becomes unused — a pure text transform with no filesystem access.\n",
+      "rewriteNodeBuiltinCallSites — Rewrites every call site of one node-builtin-to-house-hand mapping's builtin form in a JavaScript ESM source to the Group form, adding the Group import when absent and dropping the builtin import when it becomes unused — a pure text transform with no filesystem access.\n",
     );
   } else {
     let text = "";
@@ -326,7 +326,7 @@ test("removes only the matched specifier when other specifiers remain in use", (
   assert.deepEqual(result.importAdded, { source: "@red-cup-engineering/resolve-filepath-service", name: "resolveFilepath" });
 });
 
-test("does not re-add an already-present house import", () => {
+test("does not re-add an already-present Group import", () => {
   const text =
     "import { resolveFilepath } from \"@red-cup-engineering/resolve-filepath-service\";\n" +
     "import { resolve } from \"node:path\";\n" +
@@ -363,9 +363,9 @@ test("is a no-op when no call site matches", () => {
   assert.equal(result.importRemoved, null);
 });
 
-test("refuses a gap mapping with no house hand", () => {
+test("refuses a gap mapping with no Group hand", () => {
   const gap = { ...mapping, housePackage: null, houseFunction: null };
-  assert.throws(() => rewriteNodeBuiltinCallSites({ text: "const x = 1;\n", mapping: gap }), /house hand/u);
+  assert.throws(() => rewriteNodeBuiltinCallSites({ text: "const x = 1;\n", mapping: gap }), /Group hand/u);
 });
 
 test("refuses an async-shape mismatch", () => {

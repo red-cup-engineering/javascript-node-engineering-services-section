@@ -9,7 +9,7 @@
 - `missing-text-or-path-refusal`: The operation must refuse a request whose `text` is not a string, or whose `path` does not end in `scripts/<name>.mjs` (at any directory depth). [claims: malformed-input-outside-domain]
 - `no-mapping-invention`: The operation must not invent a mapping id for a builtin.importedName pair absent from its embedded table; such a pair reports `mappingId: null`. [claims: mapping-table-is-the-only-source]
 ## Laws
-- `fabricate-do-not-hand-write` | 561 Group working discipline, dispatch-agents skill | 2026-09-04 | .claude/skills/dispatch-agents/SKILL.md | Applies to the imports of every new script and source module in the tree. | A direct node:fs, node:path, or node:child_process import where a house service exists is a defect a lot must not ship; this operation is what measures how many such imports remain and whether an exact house-hand mapping already exists for each.
+- `fabricate-do-not-hand-write` | 561 Group working discipline, dispatch-agents skill | 2026-09-04 | .claude/skills/dispatch-agents/SKILL.md | Applies to the imports of every new script and source module in the tree. | A direct node:fs, node:path, or node:child_process import where a Group service exists is a defect a lot must not ship; this operation is what measures how many such imports remain and whether an exact house-hand mapping already exists for each.
 - `primitives-exist-once` | 561 Group working discipline | 2026-08-30 | CLAUDE.md | Applies to every Node builtin call site this operation finds a mapping id for. | A call site with a non-null mappingId is evidence the tree still hand-rolls a primitive the registry already owns once.
 ## Standards
 - `node-esm-operation` | Node.js | v24.2.0+ | https://nodejs.org/docs/v24/api/esm.html | Applies to the .mjs operation, its import.meta.main guard, and downstream package-birth assays. | The package uses one executable ESM operation source file that is eligible for downstream staged package-birth assays.
@@ -254,7 +254,7 @@ test("finds a namespace-import property-access call site and records awaited", (
   assert.equal(reading.callSites[0].mappingId, "map-fs-promises-read-file");
 });
 
-test("reports a gap mapping id for a builtin with no house hand", () => {
+test("reports a gap mapping id for a builtin with no Group hand", () => {
   const reading = readNodeBuiltinUsage({ path: "scripts/x.mjs", text: "import { dirname } from \"node:path\";\nconst d = dirname(\"/a/b\");\n" });
   assert.equal(reading.callSites[0].mappingId, "gap-path-dirname");
 });

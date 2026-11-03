@@ -8,7 +8,7 @@ duplicates the service and balloons the tree (carried
 in `.claude/skills/dispatch-agents/SKILL.md`, "Fabricate, do not hand-write").
 
 - `services/audit-node-builtin-imports-service` — one operation: audit one
-  source text for single-line imports of Node built-ins a house service owns,
+  source text for single-line imports of Node built-ins a Group service owns,
   returning the line, the built-in, and the owning service. Fabricated
   2026-09-04 through `fabricate-markdown-jsnode-operation-package-service`
   from the work order kept in its `data/records/`; its fabrication receipt is

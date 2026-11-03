@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mergeTextOperations, namespaceTextOperations } from "@red-cup-engineering/computer-text-content-engineering-services-section/computer-text-engine";
+import { mergeTextOperations, namespaceTextOperations } from "@red-cup-engineering/computer-text-content-engineering-services-section/text-engine";
 import { invokeTextOperation } from "../src/invoke-text-operation.mjs";
 
 const markdownOperations = namespaceTextOperations("markdown", {

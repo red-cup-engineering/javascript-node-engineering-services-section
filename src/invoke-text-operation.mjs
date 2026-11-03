@@ -17,7 +17,7 @@ export async function invokeTextOperation({ operations, request } = {}) {
       kind: "typed-operation-refusal",
       requestId: typeof request?.requestId === "string" && request.requestId !== "" ? request.requestId : "unknown",
       code: "unnamespaced-operation",
-      message: "computer-text-engine requires a namespaced operationId (domain:operation)",
+      message: "text-engine requires a namespaced operationId (domain:operation)",
     });
   }
   return invokeTypedOperation({ operations, request });

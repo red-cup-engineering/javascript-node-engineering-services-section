@@ -1,0 +1,44 @@
+{
+  "name": "@red-cup-engineering/workspace-analysis",
+  "version": "0.8.0",
+  "type": "module",
+  "description": "Workspace package, section, glossary, and fabrication-record analysis with cached observations.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "exports": {
+    ".": "./src/index.mjs",
+    "./service": "./src/service.mjs",
+    "./cli": "./src/cli.mjs",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@red-cup-engineering/coding-context-projection-service": "0.3.4",
+    "@red-cup-engineering/computer-data-engine": "0.11.2",
+    "@red-cup-engineering/computer-platform": "0.5.3",
+    "@red-cup-engineering/computer-web-platform": "0.6.0",
+    "@red-cup-engineering/computer-web-server": "0.6.0",
+    "@red-cup-engineering/javascript-computer": "0.2.6",
+    "@red-cup-engineering/javascript-deduplication-services-section": "0.2.3",
+    "@red-cup-engineering/jsnode-codecs": "0.1.1",
+    "@red-cup-engineering/jsnode-package-services-section": "0.2.2",
+    "@red-cup-engineering/jsnode-topology": "0.2.1",
+    "@red-cup-engineering/jsnode-workspace-analysis-services-section": "0.1.3",
+    "@red-cup-engineering/markdown-engineering-services-section": "0.5.0",
+    "@red-cup-engineering/mcp-tool-server": "0.1.0",
+    "@red-cup-engineering/term-engineering-services-section": "0.3.0",
+    "@red-cup-engineering/mcp-engineering-services-section": "0.1.0"
+  },
+  "bin": {
+    "workspace-analysis": "./src/cli.mjs"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "sideEffects": false
+}

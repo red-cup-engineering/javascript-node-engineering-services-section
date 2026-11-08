@@ -67,8 +67,16 @@ source-level type compatibility is not a receipt of live operation.
 
 Node.js executes the effectful side of [LAGOON](https://github.com/red-cup-engineering/engineering-services-section/blob/main/content/text/glossary/terms/lagoon.md), which uses Guix/Guile for immutable construction and target receiving. No JSNode declaration by itself authorizes deployment, confers an OS capability, or guarantees isolation from malicious scripts; the [Node.js permission-model guidance](https://nodejs.org/api/permissions.html) explicitly excludes that security guarantee. For the scientific inheritance and open categorical bridges, see [Science's functional-runtime-platform ledger](https://github.com/lenticule-science/561-theory-science-services-section/blob/main/engineering/theories/tech/theories/computing/theories/predicated-computing/theories/functional-runtime-platform/prose/teaching/explanations/what-functional-runtime-platform-inherits.md).
 
-NOG lives at `apps/nog` and is the first local app to expose this composition
-description directly.
+Earlier notes name NOG at `apps/nog` as the intended local composition
+interface. That app is not present in this repository's current source tree.
+The existing executable contracts are in
+[Node.js Operation Engineering](https://github.com/red-cup-engineering/javascript-node-operation-engineering-services-section/blob/main/src/operation.mjs).
+[Service Section Engineering](https://github.com/red-cup-engineering/service-section-engineering-services-section/blob/main/content/text/documents/articles/specifications/section-relations-v1.md)
+provides a concrete consumer: its schema-bound section-relation operations
+retain source attribution, native SignChain rules, settlement replay and
+opposing evidence through source-grounded rule composition. These inspectable
+operations are an available starting point; they do not constitute the
+missing NOG app or establish a categorical composition theorem.
 
 ## Earlier work
 

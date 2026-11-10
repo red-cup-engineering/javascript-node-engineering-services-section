@@ -2,10 +2,6 @@
 	path = services/javascript-node-command-execution-services-section/services/execute-javascript-node-command-service
 	url = https://github.com/red-cup-engineering/execute-javascript-node-command-service.git
 	branch = main
-[submodule "services-section-form-services-section"]
-	path = services/services-section-form-services-section
-	url = https://github.com/red-cup-engineering/services-section-form-engineering-services-section.git
-	branch = main
 [submodule "node-runtime-authority-services-section"]
 	path = services/node-runtime-authority-services-section
 	url = https://github.com/red-cup-engineering/node-runtime-authority-engineering-services-section.git

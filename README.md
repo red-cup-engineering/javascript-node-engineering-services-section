@@ -70,7 +70,7 @@ Node.js executes the effectful side of [LAGOON](https://github.com/red-cup-engin
 Earlier notes name NOG at `apps/nog` as the intended local composition
 interface. That app is not present in this repository's current source tree.
 The existing executable contracts are in
-[Node.js Operation Engineering](https://github.com/red-cup-engineering/javascript-node-operation-engineering-services-section/blob/main/src/operation.mjs).
+[Node.js Operation Engineering](https://github.com/red-cup-engineering/node-js-function-engineering-services-section/blob/main/src/operation.mjs).
 [Service Section Engineering](https://github.com/red-cup-engineering/service-section-engineering-services-section/blob/main/content/text/documents/articles/specifications/section-relations-v1.md)
 provides a concrete consumer: its schema-bound section-relation operations
 retain source attribution, native SignChain rules, settlement replay and

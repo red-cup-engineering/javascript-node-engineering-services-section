@@ -13,6 +13,17 @@ authored interfaces. Historical package identifiers and the `node` executable
 retain their original spellings; a *node* meaning a host or graph vertex is
 not the Node.js runtime.
 
+## Quickstart
+
+Use the [runnable example](examples/quickstart.test.mjs) to invoke a text
+operation by its qualified ID. The runtime adapter owns that namespace
+boundary. [Node.js Function Engineering](https://github.com/red-cup-engineering/node-js-function-engineering-services-section)
+owns the operation interpreter and its command entrance.
+
+The [public API](docs/API.md) lists the entry points shipped by this source
+tree. Run `pnpm install --frozen-lockfile`, `npm test`, and
+`npm run test:consumer`.
+
 ## Executable and compositional shape
 
 - `services/**/src/*` holds importable operation realizations: carriers,

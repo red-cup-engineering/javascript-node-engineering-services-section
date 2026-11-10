@@ -42,7 +42,7 @@ proposed composition.
 
 ## JavaScript and TypeScript precursor code
 
-- `lib/emsenn/services/561-group/services/engineering-services-section/services/computer-services-section/services/computer-code-services-section/services/javascript-services-section/services/javascript-node-services-section/services/jsnode-packaging-services-section/services/npm-services-section/services/npm-registry-services-section/services/npm-workspace-publication-service/src/workspace-graph.mjs`
+- [npm workspace dependency graph](https://github.com/red-cup-engineering/npm-workspace-publication-computer-code-development-systems-engineering-services-section/blob/main/src/workspace-graph.mjs)
   is the current package-level manifest scanner, dependency graph, closure, and
   leaf-first tiering implementation. It does not yet admit `bin` entries as
   nodes and it flattens dependency kinds.

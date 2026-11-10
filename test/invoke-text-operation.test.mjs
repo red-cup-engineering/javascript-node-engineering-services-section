@@ -1,15 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { mergeTextOperations, namespaceTextOperations } from "@red-cup-engineering/computer-text-content-engineering-services-section/text-engine";
 import { invokeTextOperation } from "../src/invoke-text-operation.mjs";
 
-const markdownOperations = namespaceTextOperations("markdown", {
-  "read-markdown-features": (text) => ({ length: text.length }),
-});
-const documentOperations = namespaceTextOperations("document", {
-  "count-words": (text) => text.split(/\s+/u).filter(Boolean).length,
-});
-const operations = mergeTextOperations(markdownOperations, documentOperations);
+const operations = {
+  "markdown:read-markdown-features": text => ({ length: text.length }),
+  "document:count-words": text => text.split(/\s+/u).filter(Boolean).length,
+};
 
 function request(overrides = {}) {
   return {

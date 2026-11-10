@@ -1,0 +1,38 @@
+name: Node.js Runtime acceptance
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: npm run check
+      - run: npm test
+      - name: Run the installed runtime example
+        run: |
+          consumer=$(mktemp -d)
+          trap 'rm -rf "$consumer"' EXIT
+          archive=$(npm pack --silent --ignore-scripts --pack-destination "$consumer")
+          cd "$consumer"
+          npm install --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org/ \
+            --@red-cup-engineering:registry=https://registry.561.group/ \
+            --@lenticule-science:registry=https://registry.561.group/ "./$archive"
+          package=node_modules/@red-cup-engineering/javascript-node-services-section
+          test -f "$package/docs/API.md"
+          cp "$package/examples/quickstart.test.mjs" quickstart.test.mjs
+          node --test ./quickstart.test.mjs

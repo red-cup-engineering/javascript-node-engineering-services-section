@@ -1,7 +1,3 @@
-[submodule "javascript-node-operation-engineering-services-section"]
-	path = services/javascript-node-operation-engineering-services-section
-	url = https://github.com/red-cup-engineering/javascript-node-operation-engineering-services-section.git
-	branch = main
 [submodule "execute-javascript-node-command-service"]
 	path = services/javascript-node-command-execution-services-section/services/execute-javascript-node-command-service
 	url = https://github.com/red-cup-engineering/execute-javascript-node-command-service.git

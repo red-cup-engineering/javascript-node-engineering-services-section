@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "basis": "Read JavaScript source as a module syntax tree with exact spans without executing the program.",
+  "cases": [
+    {
+      "id": "JS-PARSER-REFUSAL",
+      "role": "source",
+      "kind": "refusal",
+      "claim": "A declaration without a binding name refuses with SyntaxError.",
+      "file": "test/javascript-parser.test.mjs"
+    },
+    {
+      "id": "JS-PARSER-QUICKSTART",
+      "role": "consumer",
+      "kind": "example",
+      "claim": "An installed reader can identify an exported constant and inspect its literal initializer.",
+      "file": "examples/quickstart.test.mjs"
+    }
+  ]
+}

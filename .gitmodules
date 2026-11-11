@@ -1,28 +1,28 @@
-[submodule "execute-javascript-node-command-service"]
+[submodule "services/javascript-node-command-execution-services-section/services/execute-javascript-node-command-service"]
 	path = services/javascript-node-command-execution-services-section/services/execute-javascript-node-command-service
 	url = https://github.com/red-cup-engineering/execute-javascript-node-command-service.git
 	branch = main
-[submodule "node-runtime-authority-services-section"]
+[submodule "services/node-runtime-authority-services-section"]
 	path = services/node-runtime-authority-services-section
 	url = https://github.com/red-cup-engineering/node-runtime-authority-engineering-services-section.git
 	branch = main
-[submodule "node-process-services-section"]
+[submodule "services/node-process-services-section"]
 	path = services/node-process-services-section
 	url = https://github.com/red-cup-engineering/node-process-engineering-services-section.git
 	branch = main
-[submodule "jsnode-packaging-services-section"]
+[submodule "services/jsnode-packaging-services-section"]
 	path = services/jsnode-packaging-services-section
 	url = https://github.com/red-cup-engineering/jsnode-packaging-engineering-services-section.git
 	branch = main
-[submodule "javascript-parser-service"]
+[submodule "services/javascript-parser-service"]
 	path = services/javascript-parser-service
 	url = https://github.com/red-cup-engineering/javascript-parser-service.git
 	branch = main
-[submodule "javascript-node-operation-service"]
+[submodule "services/javascript-node-operation-service"]
 	path = services/javascript-node-operation-service
 	url = https://github.com/red-cup-engineering/javascript-node-operation-service.git
 	branch = main
-[submodule "javascript-module-closure-service"]
+[submodule "services/javascript-module-closure-service"]
 	path = services/javascript-module-closure-service
 	url = https://github.com/red-cup-engineering/javascript-module-closure-service.git
 	branch = main

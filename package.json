@@ -12,7 +12,6 @@
   },
   "files": [
     "src/invoke-text-operation.mjs",
-    "docs/API.md",
     "examples/quickstart.test.mjs"
   ],
   "scripts": {

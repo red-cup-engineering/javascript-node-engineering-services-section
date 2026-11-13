@@ -33,6 +33,5 @@ jobs:
             --@red-cup-engineering:registry=https://registry.561.group/ \
             --@lenticule-science:registry=https://registry.561.group/ "./$archive"
           package=node_modules/@red-cup-engineering/javascript-node-engineering-services-section
-          test -f "$package/docs/API.md"
           cp "$package/examples/quickstart.test.mjs" quickstart.test.mjs
           node --test ./quickstart.test.mjs

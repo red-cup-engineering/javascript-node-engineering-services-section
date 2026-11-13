@@ -11,7 +11,6 @@ Parse JavaScript modules into a syntax tree and walk it, with no dependencies.
 
 ## Quickstart
 
-Read JavaScript source as a module syntax tree with exact spans without executing the program. See the [runnable example](examples/quickstart.test.mjs)
-and [public API](docs/API.md).
+Read JavaScript source as a module syntax tree with exact spans without executing the program. See the [runnable example](examples/quickstart.test.mjs).
 
 Run `npm ci`, then `npm test` and `npm run test:consumer`.

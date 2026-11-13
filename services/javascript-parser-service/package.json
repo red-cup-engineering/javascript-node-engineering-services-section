@@ -6,7 +6,6 @@
   "license": "MIT",
   "files": [
     "src",
-    "docs/API.md",
     "examples/quickstart.test.mjs"
   ],
   "exports": {

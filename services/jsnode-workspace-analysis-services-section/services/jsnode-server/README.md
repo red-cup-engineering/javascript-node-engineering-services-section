@@ -58,7 +58,7 @@ against the live server returns:
   "packages": [
     { "name": "@red-cup-engineering/computer" },
     { "name": "@red-cup-engineering/qwzspace" },
-    { "name": "@red-cup-engineering/semiotic-exchange-chain-services-section" }
+    { "name": "@red-cup-engineering/semiotic-exchange-chain-computer-system-engineering-services-section" }
   ]
 }
 ```

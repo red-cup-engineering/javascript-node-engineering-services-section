@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { invokeTextOperation } from "@red-cup-engineering/javascript-node-services-section/invoke-text-operation";
+import { invokeTextOperation } from "@red-cup-engineering/javascript-node-engineering-services-section/invoke-text-operation";
 
 test("NODE-RUNTIME-QUICKSTART", async () => {
   const result = await invokeTextOperation({

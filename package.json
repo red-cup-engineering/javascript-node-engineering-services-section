@@ -1,5 +1,5 @@
 {
-  "name": "@red-cup-engineering/javascript-node-services-section",
+  "name": "@red-cup-engineering/javascript-node-engineering-services-section",
   "version": "0.4.3",
   "type": "module",
   "description": "Node.js execution of schema-bound operations and shared command transports.",

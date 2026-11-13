@@ -5,7 +5,7 @@ import {createHash} from 'node:crypto';
 import {mkdtempSync,writeFileSync,rmSync,mkdirSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {canonicalJson} from '@red-cup-engineering/json-services-section';
+import {canonicalJson} from '@red-cup-engineering/json-engineering-services-section';
 import {captureModuleClosure,javascriptProgram,executeJavascriptProgram,admitModuleClosure,javascriptInstalledResolver,moduleClosureDigest} from '../src/module-closure.mjs';
 function fixture(source){
  const root=mkdtempSync(join(tmpdir(),'closure-builtins-'));

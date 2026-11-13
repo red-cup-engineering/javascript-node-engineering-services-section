@@ -1,6 +1,6 @@
-import { parseJsonValue } from "@red-cup-engineering/json-services-section/parse-json-value";
-import { resolveJsonPointer } from "@red-cup-engineering/json-services-section/resolve-json-pointer";
-import { validateJsonSchema } from "@red-cup-engineering/json-schema-services-section/validation";
+import { parseJsonValue } from "@red-cup-engineering/json-engineering-services-section/parse-json-value";
+import { resolveJsonPointer } from "@red-cup-engineering/json-engineering-services-section/resolve-json-pointer";
+import { validateJsonSchema } from "@red-cup-engineering/json-schema-engineering-services-section/validation";
 import moduleParameterizationSchema from "@red-cup-engineering/computer-content-engineering-services-section/module-parameterization-schema" with { type: "json" };
 /**
  * The code a computation runs, as one identity: the modules its entries import, followed through
@@ -16,7 +16,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isBuiltin, findPackageJSON, registerHooks, createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { canonicalJson } from "@red-cup-engineering/json-services-section";
+import { canonicalJson } from "@red-cup-engineering/json-engineering-services-section";
 import { parseJavaScript, walkJavaScript } from "@red-cup-engineering/javascript-parser-service";
 
 const CONDITIONS = ["node", "import", "default"];

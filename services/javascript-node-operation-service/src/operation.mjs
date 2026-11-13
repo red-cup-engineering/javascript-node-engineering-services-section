@@ -1,6 +1,6 @@
-import { parseJsonValue } from "@red-cup-engineering/json-services-section/parse-json-value";
-import { canonicalJson } from "@red-cup-engineering/json-services-section/canonical-json";
-import { isJsonValue } from "@red-cup-engineering/json-services-section/is-json-value";
+import { parseJsonValue } from "@red-cup-engineering/json-engineering-services-section/parse-json-value";
+import { canonicalJson } from "@red-cup-engineering/json-engineering-services-section/canonical-json";
+import { isJsonValue } from "@red-cup-engineering/json-engineering-services-section/is-json-value";
 
 import { admit, defineType } from "@red-cup-engineering/signcell/type-system";
 

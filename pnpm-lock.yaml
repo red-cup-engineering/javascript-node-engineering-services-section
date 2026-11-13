@@ -39,7 +39,7 @@ packages:
   '@hyperjump/uri@1.4.0':
     resolution: {integrity: sha512-A6eBnSLNb6GdJHnYnA0sDutV950mWNmmlWgASwIoZvXqtXcYKBeEhbGrXpHeyHHInC/LHVt8zNanILp2S2oRXg==}
 
-  '@red-cup-engineering/cbor-services-section@0.1.1':
+  '@red-cup-engineering/cbor-engineering-services-section@0.1.1':
     resolution: {integrity: sha512-uUsHbXjvaFihU5JavrJpbG44Hdcg2r7zADeWgM6DO6YeIcSsAo4FrYh35pwzAqLpqQbQJrIOsDVzrccyWURu5g==}
     engines: {node: '>=24.2.0'}
 
@@ -69,18 +69,18 @@ packages:
   '@red-cup-engineering/exact-number-data-service@0.1.1':
     resolution: {integrity: sha512-D54dcxY7eqK23lktqbv0HjjNNroY2clDJ1K5TW7pWN2NBeDOGbS53yGv7sAYfToPn3YH8pKrpBVAB1URg8kcuA==}
 
-  '@red-cup-engineering/json-schema-services-section@0.5.0':
+  '@red-cup-engineering/json-schema-engineering-services-section@0.5.0':
     resolution: {integrity: sha512-kqq0KOLrbORJ0sGInJJn1rV22tqsu3FOMg5mi0RsARDYUH8O8S+LUCIW9NZwX79OLASBtTYKjOq5Zk22tv3kbw==}
     hasBin: true
 
-  '@red-cup-engineering/json-services-section@0.4.0':
+  '@red-cup-engineering/json-engineering-services-section@0.4.0':
     resolution: {integrity: sha512-WjToogRIj9qq5VaPQ52Lao8v/rXhSX7umi+rEn0Xysnfv6qAv77llXe68wboADrpQK2micSBS3DSGJWd5CoZkg==}
     engines: {node: '>=24.2.0'}
 
   '@red-cup-engineering/signcell@0.4.2':
     resolution: {integrity: sha512-RbjV7llwHP0UE3HGv8e1KLm2UgejcXP0DoDLE4o1NLYSe9qPlN2I1Ht3HIOjNOthVSXJKjKJPyazyiaUUohNxg==}
 
-  '@red-cup-engineering/uri-services-section@0.1.1':
+  '@red-cup-engineering/uri-engineering-services-section@0.1.1':
     resolution: {integrity: sha512-y5Ipia5hTOLT/0lzEX+DAC/qtfT7ey17jNT/2dh7r0fqromCUxUOQiJOYaapXXWqe79T1sCEmICjukFuLvizmw==}
 
   cbor2@2.4.0:
@@ -138,84 +138,84 @@ snapshots:
 
   '@hyperjump/uri@1.4.0': {}
 
-  '@red-cup-engineering/cbor-services-section@0.1.1':
+  '@red-cup-engineering/cbor-engineering-services-section@0.1.1':
     dependencies:
       '@red-cup-engineering/cryptographic-computer-data-engineering-services-section': 0.3.1
-      '@red-cup-engineering/json-services-section': 0.4.0
-      '@red-cup-engineering/uri-services-section': 0.1.1
+      '@red-cup-engineering/json-engineering-services-section': 0.4.0
+      '@red-cup-engineering/uri-engineering-services-section': 0.1.1
       cbor2: 2.4.0
 
   '@red-cup-engineering/computer-code-engineering-services-section@0.2.1':
     dependencies:
-      '@red-cup-engineering/cbor-services-section': 0.1.1
+      '@red-cup-engineering/cbor-engineering-services-section': 0.1.1
       '@red-cup-engineering/computer-content-address-engineering-services-section': 0.2.0
       '@red-cup-engineering/computer-content-engineering-services-section': 0.1.0
       '@red-cup-engineering/computer-data-engineering-services-section': 0.2.4
       '@red-cup-engineering/cryptographic-computer-data-engineering-services-section': 0.3.1
-      '@red-cup-engineering/json-services-section': 0.4.0
+      '@red-cup-engineering/json-engineering-services-section': 0.4.0
       '@red-cup-engineering/signcell': 0.4.2
-      '@red-cup-engineering/uri-services-section': 0.1.1
+      '@red-cup-engineering/uri-engineering-services-section': 0.1.1
 
   '@red-cup-engineering/computer-content-address-engineering-services-section@0.2.0':
     dependencies:
-      '@red-cup-engineering/cbor-services-section': 0.1.1
+      '@red-cup-engineering/cbor-engineering-services-section': 0.1.1
       '@red-cup-engineering/cryptographic-computer-data-engineering-services-section': 0.3.1
-      '@red-cup-engineering/uri-services-section': 0.1.1
+      '@red-cup-engineering/uri-engineering-services-section': 0.1.1
 
   '@red-cup-engineering/computer-content-engineering-services-section@0.1.0':
     dependencies:
-      '@red-cup-engineering/cbor-services-section': 0.1.1
+      '@red-cup-engineering/cbor-engineering-services-section': 0.1.1
       '@red-cup-engineering/computer-content-address-engineering-services-section': 0.2.0
       '@red-cup-engineering/computer-data-engineering-services-section': 0.2.0
       '@red-cup-engineering/cryptographic-computer-data-engineering-services-section': 0.3.1
-      '@red-cup-engineering/json-schema-services-section': 0.5.0
-      '@red-cup-engineering/json-services-section': 0.4.0
-      '@red-cup-engineering/uri-services-section': 0.1.1
+      '@red-cup-engineering/json-schema-engineering-services-section': 0.5.0
+      '@red-cup-engineering/json-engineering-services-section': 0.4.0
+      '@red-cup-engineering/uri-engineering-services-section': 0.1.1
 
   '@red-cup-engineering/computer-data-engineering-services-section@0.2.0':
     dependencies:
-      '@red-cup-engineering/cbor-services-section': 0.1.1
+      '@red-cup-engineering/cbor-engineering-services-section': 0.1.1
       '@red-cup-engineering/computer-content-address-engineering-services-section': 0.2.0
       '@red-cup-engineering/exact-number-data-service': 0.1.1
-      '@red-cup-engineering/json-services-section': 0.4.0
-      '@red-cup-engineering/uri-services-section': 0.1.1
+      '@red-cup-engineering/json-engineering-services-section': 0.4.0
+      '@red-cup-engineering/uri-engineering-services-section': 0.1.1
 
   '@red-cup-engineering/computer-data-engineering-services-section@0.2.4':
     dependencies:
-      '@red-cup-engineering/cbor-services-section': 0.1.1
+      '@red-cup-engineering/cbor-engineering-services-section': 0.1.1
       '@red-cup-engineering/cryptographic-computer-data-engineering-services-section': 0.3.1
       '@red-cup-engineering/exact-number-data-service': 0.1.1
-      '@red-cup-engineering/json-services-section': 0.4.0
-      '@red-cup-engineering/uri-services-section': 0.1.1
+      '@red-cup-engineering/json-engineering-services-section': 0.4.0
+      '@red-cup-engineering/uri-engineering-services-section': 0.1.1
 
   '@red-cup-engineering/cryptographic-computer-data-engineering-services-section@0.3.1':
     dependencies:
-      '@red-cup-engineering/json-services-section': 0.4.0
+      '@red-cup-engineering/json-engineering-services-section': 0.4.0
 
   '@red-cup-engineering/exact-number-data-service@0.1.1': {}
 
-  '@red-cup-engineering/json-schema-services-section@0.5.0':
+  '@red-cup-engineering/json-schema-engineering-services-section@0.5.0':
     dependencies:
       '@hyperjump/browser': 1.5.1
       '@hyperjump/json-schema': 1.18.0(@hyperjump/browser@1.5.1)
       '@red-cup-engineering/computer-data-engineering-services-section': 0.2.0
       '@red-cup-engineering/cryptographic-computer-data-engineering-services-section': 0.3.1
-      '@red-cup-engineering/json-services-section': 0.4.0
-      '@red-cup-engineering/uri-services-section': 0.1.1
+      '@red-cup-engineering/json-engineering-services-section': 0.4.0
+      '@red-cup-engineering/uri-engineering-services-section': 0.1.1
 
-  '@red-cup-engineering/json-services-section@0.4.0': {}
+  '@red-cup-engineering/json-engineering-services-section@0.4.0': {}
 
   '@red-cup-engineering/signcell@0.4.2':
     dependencies:
-      '@red-cup-engineering/cbor-services-section': 0.1.1
+      '@red-cup-engineering/cbor-engineering-services-section': 0.1.1
       '@red-cup-engineering/computer-content-address-engineering-services-section': 0.2.0
       '@red-cup-engineering/computer-data-engineering-services-section': 0.2.0
-      '@red-cup-engineering/json-schema-services-section': 0.5.0
+      '@red-cup-engineering/json-schema-engineering-services-section': 0.5.0
 
-  '@red-cup-engineering/uri-services-section@0.1.1':
+  '@red-cup-engineering/uri-engineering-services-section@0.1.1':
     dependencies:
       '@red-cup-engineering/cryptographic-computer-data-engineering-services-section': 0.3.1
-      '@red-cup-engineering/json-services-section': 0.4.0
+      '@red-cup-engineering/json-engineering-services-section': 0.4.0
 
   cbor2@2.4.0:
     dependencies:

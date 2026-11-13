@@ -32,7 +32,7 @@ The exact compiler must be resolved from the producing owner's installed depende
 
 ## Decision: bounded native registry metadata acquisition
 
-The [native registry metadata input decision](../../../../services/node-runtime-authority-services-section/services/node-runtime-release-promotion-service/content/text/documents/specifications/native-registry-metadata-inputs.md) qualifies the exact PNPM 11.28.5 public API cohort in the original release fabricator solely for obtaining immutable build-time metadata. Runtime import and production-pack use are forbidden; frozen no-network receiving and installed supplier identity remain independent obligations.
+The [native registry metadata input decision](../../../../services/node-runtime-authority-engineering-services-section/services/node-runtime-release-promotion-service/content/text/documents/specifications/native-registry-metadata-inputs.md) qualifies the exact PNPM 11.28.5 public API cohort in the original release fabricator solely for obtaining immutable build-time metadata. Runtime import and production-pack use are forbidden; frozen no-network receiving and installed supplier identity remain independent obligations.
 
 ## Decision: declared host/profile dependencies are used
 

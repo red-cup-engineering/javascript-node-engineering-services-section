@@ -46,7 +46,7 @@ proposed composition.
   is the current package-level manifest scanner, dependency graph, closure, and
   leaf-first tiering implementation. It does not yet admit `bin` entries as
   nodes and it flattens dependency kinds.
-- `lib/emsenn/services/561-group/services/engineering-services-section/services/computer-services-section/services/computer-code-services-section/services/javascript-services-section/services/javascript-node-services-section/services/jsnode-packaging-services-section/services/npm-services-section/services/npm-package-engineering-services-section/services/npm-package-manifest-admission-service/scripts/admit-npm-package-manifest.mjs`
+- `lib/emsenn/services/561-group/services/engineering-services-section/services/computer-services-section/services/computer-code-services-section/services/javascript-services-section/services/javascript-node-services-section/services/jsnode-packaging-engineering-services-section/services/npm-services-section/services/npm-package-engineering-services-section/services/npm-package-manifest-admission-service/scripts/admit-npm-package-manifest.mjs`
   is the current immutable npm-manifest admission boundary. It validates
   dependency maps but does not yet specialize or admit the `bin` field.
 - `lib/emsenn/services/561-group/services/engineering-services-section/services/computer-services-section/services/computer-code-services-section/services/javascript-services-section/services/javascript-node-services-section/services/jsnode-workspace-analysis-services-section/services/organizing-jsnode-analysis/src/organizing/workspaces/graph.mts`

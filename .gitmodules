@@ -2,15 +2,15 @@
 	path = services/javascript-node-command-execution-services-section/services/execute-javascript-node-command-service
 	url = https://github.com/red-cup-engineering/execute-javascript-node-command-service.git
 	branch = main
-[submodule "services/node-runtime-authority-services-section"]
-	path = services/node-runtime-authority-services-section
+[submodule "services/node-runtime-authority-engineering-services-section"]
+	path = services/node-runtime-authority-engineering-services-section
 	url = https://github.com/red-cup-engineering/node-runtime-authority-engineering-services-section.git
 	branch = main
-[submodule "services/node-process-services-section"]
-	path = services/node-process-services-section
+[submodule "services/node-process-engineering-services-section"]
+	path = services/node-process-engineering-services-section
 	url = https://github.com/red-cup-engineering/node-process-engineering-services-section.git
 	branch = main
-[submodule "services/jsnode-packaging-services-section"]
-	path = services/jsnode-packaging-services-section
+[submodule "services/jsnode-packaging-engineering-services-section"]
+	path = services/jsnode-packaging-engineering-services-section
 	url = https://github.com/red-cup-engineering/jsnode-packaging-engineering-services-section.git
 	branch = main

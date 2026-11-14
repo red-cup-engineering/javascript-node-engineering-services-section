@@ -56,7 +56,7 @@ test('output failure propagates without attempting a second write', async () => 
 
 
 test('one Code executor drives a Data declaration without rereading stdin', async () => {
-  const module = await import('@red-cup-engineering/json-engineering-services-section/differentiate-data');
+  const module = await import('@red-cup-engineering/json-engine/differentiate-data');
   const io = streams(['invalid\n' + JSON.stringify({ before: { name: 'old' }, after: { name: 'new' } }) + '\n']);
   await runJavascriptNodeOperationModule(module, io);
   const rows = io.text().trim().split('\n').map(JSON.parse);

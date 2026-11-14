@@ -23,7 +23,7 @@
     "@red-cup-engineering/computer-content-engineering-services-section": "0.2.1-dev.1",
     "@red-cup-engineering/javascript-parser-service": "0.2.0-dev.1",
     "@red-cup-engineering/json-schema-engineering-services-section": "0.5.6-dev.1",
-    "@red-cup-engineering/json-engineering-services-section": "0.4.3-dev.0"
+    "@red-cup-engineering/json-engine": "0.5.0"
   },
   "repository": {
     "type": "git",

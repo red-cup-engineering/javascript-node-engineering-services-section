@@ -1,5 +1,5 @@
-import { parseJsonValue } from "@red-cup-engineering/json-engineering-services-section/parse-json-value";
-import { resolveJsonPointer } from "@red-cup-engineering/json-engineering-services-section/resolve-json-pointer";
+import { parseJsonValue } from "@red-cup-engineering/json-engine/parse-json-value";
+import { resolveJsonPointer } from "@red-cup-engineering/json-engine/resolve-json-pointer";
 import { validateJsonSchema } from "@red-cup-engineering/json-schema-engineering-services-section/validation";
 import moduleParameterizationSchema from "@red-cup-engineering/computer-content-engineering-services-section/module-parameterization-schema" with { type: "json" };
 /**
@@ -16,7 +16,7 @@ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isBuiltin, findPackageJSON, registerHooks, createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { canonicalJson } from "@red-cup-engineering/json-engineering-services-section";
+import { canonicalJson } from "@red-cup-engineering/json-engine";
 import { parseJavaScript, walkJavaScript } from "@red-cup-engineering/javascript-parser-service";
 
 const CONDITIONS = ["node", "import", "default"];

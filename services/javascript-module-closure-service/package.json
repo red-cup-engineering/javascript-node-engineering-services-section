@@ -1,11 +1,12 @@
 {
   "name": "@red-cup-engineering/javascript-module-closure-service",
-  "version": "0.1.1",
+  "version": "0.1.2-dev.0",
   "description": "The code a computation runs, as one identity: capture a JavaScript module closure, digest and admit it, and execute a program from it.",
   "type": "module",
   "license": "MIT",
   "files": [
-    "src"
+    "src",
+    "test"
   ],
   "exports": {
     ".": "./src/module-closure.mjs",
@@ -19,10 +20,10 @@
     "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
-    "@red-cup-engineering/computer-content-engineering-services-section": "0.1.0",
-    "@red-cup-engineering/javascript-parser-service": "0.1.0",
-    "@red-cup-engineering/json-schema-engineering-services-section": "0.5.0",
-    "@red-cup-engineering/json-engineering-services-section": "0.4.0"
+    "@red-cup-engineering/computer-content-engineering-services-section": "0.2.1-dev.1",
+    "@red-cup-engineering/javascript-parser-service": "0.2.0-dev.1",
+    "@red-cup-engineering/json-schema-engineering-services-section": "0.5.6-dev.1",
+    "@red-cup-engineering/json-engineering-services-section": "0.4.3-dev.0"
   },
   "repository": {
     "type": "git",
@@ -33,5 +34,12 @@
     "type": "individual",
     "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
   },
-  "private": false
+  "private": false,
+  "receivingTests": [
+    "test/module-addressed-reentry.test.mjs",
+    "test/module-builtins.test.mjs",
+    "test/module-closure-programmes.test.mjs",
+    "test/module-private-imports.test.mjs",
+    "test/module-source-resolution.test.mjs"
+  ]
 }

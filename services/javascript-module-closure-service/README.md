@@ -99,3 +99,7 @@ caller or environmental effect authority. Typed Operation admission and actual
 consumer receiving remain separate obligations. A captured older executor need
 not be rewritten or substituted; same-module re-export plus admitted
 `javascriptProgram(import.meta.url, "bodyExport")` retains its existing route.
+
+## Native source prerequisite
+
+This development selection uses the genuine current Content, JSON Schema, JSON and JavaScript parser sources declared in the manifest. Runtime source and all five original test suites are unchanged; those suites are shipped and explicitly enrolled for installed receiving. Native source and packed checks qualify that selected composition, not a frozen registry installation, registry issuance, deployment, or permission for captured builtin effects. Upstream source-approval and registry holds remain unchanged. Manifest selections do not themselves authenticate a whole installed graph.

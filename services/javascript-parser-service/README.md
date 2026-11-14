@@ -28,3 +28,5 @@ Publication retains its own deferred/try-boundary policy; package fabrication
 retains mapping validation and atomic relocation. Original parser entry points
 are unchanged. The development version is a source prerequisite, not registry
 issuance or activation evidence.
+
+`./module-export-names` exports `readJavaScriptModuleExportNames(program)`: an immutable locally enumerable export-name set in source order and an explicit `hasStarExport` flag. Destructured declarations and exact ECMAScript exported names are retained. It does not resolve or execute star-export suppliers. Publisher and package module projection consume this common parser evidence rather than maintain duplicate syntax readers.

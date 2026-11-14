@@ -14,3 +14,17 @@ Parse JavaScript modules into a syntax tree and walk it, with no dependencies.
 Read JavaScript source as a module syntax tree with exact spans without executing the program. See the [runnable example](examples/quickstart.test.mjs).
 
 Run `npm ci`, then `npm test` and `npm run test:consumer`.
+
+## Module-reference sites
+
+`./module-reference-sites` exports `readJavaScriptModuleRequestSites(program)`
+for an already admitted Program. Frozen records carry the owning AST node,
+request kind, literal specifier and UTF-16 literal start/end (null for computed
+requests). Nodes are borrowed. Named `createRequire` factory aliases with const
+same-source loaders use existing lexical binding identities. Other origins,
+mutable methods, loader-provider properties and arbitrary alias propagation are
+not inferred. This API performs no resolution, guarding policy or source edits.
+Publication retains its own deferred/try-boundary policy; package fabrication
+retains mapping validation and atomic relocation. Original parser entry points
+are unchanged. The development version is a source prerequisite, not registry
+issuance or activation evidence.

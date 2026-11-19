@@ -1,0 +1,31 @@
+{
+  "name": "@red-cup-engineering/javascript-node-engineering-services-section",
+  "version": "0.4.6-dev.0",
+  "type": "module",
+  "description": "Node.js execution of schema-bound operations and shared command transports.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/javascript-node-engineering-services-section.git"
+  },
+  "exports": {
+    "./invoke-text-operation": "./src/invoke-text-operation.mjs"
+  },
+  "files": [
+    "src/invoke-text-operation.mjs"
+  ],
+  "scripts": {
+    "check": "node --check src/invoke-text-operation.mjs"
+  },
+  "engines": {
+    "node": ">=24.2.0"
+  },
+  "dependencies": {
+    "@red-cup-engineering/computer-code-engineering-services-section": "^0.2.1"
+  },
+  "license": "MIT",
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
+  },
+  "packageManager": "pnpm@11.19.0"
+}

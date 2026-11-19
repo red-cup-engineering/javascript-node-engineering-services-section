@@ -1,0 +1,35 @@
+{
+  "name": "@red-cup-engineering/admit-javascript-node-command-execution-request-service",
+  "version": "0.1.3-dev.0",
+  "description": "Admits a candidate as an exact JavascriptNodeCommandExecutionRequest@1, unchanged.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "scripts",
+    "data/records",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./scripts/admit-javascript-node-command-execution-request.mjs",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "admit-javascript-node-command-execution-request": "./scripts/admit-javascript-node-command-execution-request.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/javascript-node-engineering-services-section.git",
+    "directory": "services/javascript-node-command-execution-services-section/services/admit-javascript-node-command-execution-request-service"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
+  },
+  "engines": {
+    "node": ">=24.2.0"
+  },
+  "dependencies": {
+    "@red-cup-engineering/node-js-function-engineering-services-section": "^0.5.4"
+  },
+  "private": false
+}

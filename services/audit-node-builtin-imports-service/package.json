@@ -1,0 +1,33 @@
+{
+  "name": "@red-cup-engineering/audit-node-builtin-imports-service",
+  "version": "0.5.2-dev.0",
+  "description": "Audit JavaScript source for imports of substrate modules that a house service owns.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "scripts"
+  ],
+  "exports": {
+    ".": "./scripts/audit-node-builtin-imports.mjs",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "audit-node-builtin-imports": "./scripts/audit-node-builtin-imports.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/javascript-node-engineering-services-section.git",
+    "directory": "services/audit-node-builtin-imports-service"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
+  },
+  "engines": {
+    "node": ">=24.2.0"
+  },
+  "dependencies": {
+    "@red-cup-engineering/node-js-function-engineering-services-section": "^0.5.4"
+  },
+  "private": false
+}

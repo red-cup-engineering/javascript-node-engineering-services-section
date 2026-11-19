@@ -1,0 +1,38 @@
+{
+  "name": "@red-cup-engineering/project-javascript-node-command-execution-receipt-service",
+  "version": "0.2.3-dev.0",
+  "description": "Projects the exact execution request and child-process result boundary to an immutable receipt.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "scripts"
+  ],
+  "exports": {
+    ".": "./scripts/project-javascript-node-command-execution-receipt.mjs",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "project-javascript-node-command-execution-receipt": "./scripts/project-javascript-node-command-execution-receipt.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/javascript-node-engineering-services-section.git",
+    "directory": "services/javascript-node-command-execution-services-section/services/project-javascript-node-command-execution-receipt-service"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
+  },
+  "engines": {
+    "node": ">=24.2.0"
+  },
+  "dependencies": {
+    "@red-cup-engineering/node-js-function-engineering-services-section": "^0.5.4",
+    "@red-cup-engineering/admit-javascript-node-command-execution-request-service": "^0.1.2",
+    "@red-cup-engineering/json-engine": "^0.5.3"
+  },
+  "devDependencies": {
+    "@red-cup-engineering/jsonl-engineering-services-section": "^0.1.5"
+  },
+  "private": false
+}

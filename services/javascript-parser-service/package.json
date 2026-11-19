@@ -1,0 +1,28 @@
+{
+  "name": "@red-cup-engineering/javascript-parser-service",
+  "version": "0.2.2-dev.0",
+  "description": "Parse JavaScript modules into a syntax tree and walk it, with no dependencies.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": "./src/javascript-parser.mjs",
+    "./package.json": "./package.json",
+    "./module-reference-sites": "./src/module-reference-sites.mjs",
+    "./module-export-names": "./src/module-export-names.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/javascript-node-engineering-services-section.git",
+    "directory": "services/javascript-parser-service"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

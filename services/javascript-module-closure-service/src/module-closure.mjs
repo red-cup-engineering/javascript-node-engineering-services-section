@@ -418,18 +418,18 @@ function sourceContext(url) {
   const value = new URL(url), known = programmeState.moduleUrls.get(value.href);
   const closure = known?.closure ?? value.searchParams.get(programmeParameter);
   if (!closure) return null;
-  const admitted = programmeState.closures.get(closure);
+  const validated = programmeState.closures.get(closure);
   const key = known?.key ?? value.searchParams.get(moduleParameter);
-  if (!admitted || !Object.hasOwn(admitted.body.modules, key)) throw new TypeError("Unadmitted JavaScript programme module");
-  return { closure, key, admitted };
+  if (!validated || !Object.hasOwn(validated.body.modules, key)) throw new TypeError("Unadmitted JavaScript programme module");
+  return { closure, key, admitted: validated };
 }
-function moduleUrl(closure, key, admitted) {
-  if (admitted.body.modules[key].format === "commonjs") {
+function moduleUrl(closure, key, validated) {
+  if (validated.body.modules[key].format === "commonjs") {
     const url = pathToFileURL(resolve("/.561-programmes", closure.slice(closure.lastIndexOf(";") + 1), key)).href;
     programmeState.moduleUrls.set(url, { closure, key });
     return url;
   }
-  const url = new URL(admitted.origins[key]);
+  const url = new URL(validated.origins[key]);
   url.searchParams.set(programmeParameter, closure);
   url.searchParams.set(moduleParameter, key);
   return url.href;
@@ -555,15 +555,15 @@ export function javascriptProgram(module, exportName, options) {
   return Object.freeze({ kind: "jsnode", closure: closure.id, module: context?.key ?? closure.body.entry, export: exportName });
 }
 export function moduleClosureMaterial(id) {
-  const admitted = programmeState.closures.get(id);
-  if (!admitted) throw new TypeError("Unadmitted JavaScript programme closure");
-  return admitted.body;
+  const validated = programmeState.closures.get(id);
+  if (!validated) throw new TypeError("Unadmitted JavaScript programme closure");
+  return validated.body;
 }
 export async function executeJavascriptProgram(programme, input, arguments_, context) {
-  const admitted = programmeState.closures.get(programme.closure);
-  if (programme.kind !== "jsnode" || !admitted || !Object.hasOwn(admitted.body.modules, programme.module))
+  const validated = programmeState.closures.get(programme.closure);
+  if (programme.kind !== "jsnode" || !validated || !Object.hasOwn(validated.body.modules, programme.module))
     throw new TypeError("Unadmitted JavaScript programme");
-  const module = await import(moduleUrl(programme.closure, programme.module, admitted));
+  const module = await import(moduleUrl(programme.closure, programme.module, validated));
   const callable = module[programme.export];
   if (typeof callable !== "function") throw new TypeError("JavaScript programme export is not callable");
   return callable(input, arguments_, context);

@@ -122,7 +122,7 @@ function withFileName(error, fileName) {
 }
 
 /** Parse JavaScript (or, for a `.json` name, one JSON value) into an ESTree tree. */
-function admittedProgram(text, fileName) {
+function validatedProgram(text, fileName) {
   if (typeof text !== "string") throw new TypeError("source text must be a string");
   requireFileName(fileName);
   if (/\.(?:[cm]?tsx?|jsx)$/iu.test(fileName)) throw new SyntaxError(`${fileName}: TypeScript and JSX are not JavaScript; the house parses JavaScript only`);
@@ -167,7 +167,7 @@ export function readJsnodeSourceRecord(text, fileName) {
 /** The ESTree `Program` of one admitted JavaScript source, with `comments`
  * and `tokens`; a syntax error throws, located by file, line and column. */
 export function readJsnodeAst(text, fileName) {
-  return admittedProgram(text, fileName);
+  return validatedProgram(text, fileName);
 }
 
 function projectNode(node) {
@@ -185,7 +185,7 @@ function projectNode(node) {
 export function readJsnodeSyntax(text, fileName) {
   requireFileName(fileName);
   try {
-    const program = admittedProgram(text, fileName);
+    const program = validatedProgram(text, fileName);
     return Object.freeze({ fileName, language: languageOf(fileName), diagnostics: Object.freeze([]), tree: projectNode(program) });
   } catch (error) {
     if (!(error instanceof SyntaxError)) throw error;
@@ -201,7 +201,7 @@ export function readJsnodeSyntax(text, fileName) {
  * their kind (name, punct, string, num, template, regexp, privateName) and
  * original text. */
 export function readJsnodeTokens(text, fileName) {
-  const program = admittedProgram(text, fileName);
+  const program = validatedProgram(text, fileName);
   const tokens = program.tokens.map((token) => Object.freeze({ kind: token.type, text: text.slice(token.start, token.end), start: token.start, end: token.end }));
   return Object.freeze({ source: readJsnodeSourceRecord(text, fileName), diagnostics: Object.freeze([]), tokens: Object.freeze(tokens) });
 }
@@ -221,7 +221,7 @@ const REQUEST_KINDS = Object.freeze({ import: "static-import", "dynamic-import":
  * Computed requests stay explicit as `specifier: null`; the engine never guesses.
  * The parser owns the reading of request sites; this admits the source and projects them. */
 export function readJsnodeModuleRequests(text, fileName) {
-  const sites = readJavaScriptModuleRequestSites(admittedProgram(text, fileName));
+  const sites = readJavaScriptModuleRequestSites(validatedProgram(text, fileName));
   return Object.freeze(sites
     .map((site) => Object.freeze({ kind: REQUEST_KINDS[site.kind], specifier: site.specifier, start: site.start, end: site.end }))
     .sort((left, right) => (left.start ?? 0) - (right.start ?? 0)));
@@ -232,7 +232,7 @@ export function readJsnodeModuleRequests(text, fileName) {
  * skips that node's children. */
 export function visitJsnodeSyntax(text, fileName, visit) {
   if (typeof visit !== "function") throw new TypeError("JSNode syntax visitor must be a function");
-  const program = admittedProgram(text, fileName);
+  const program = validatedProgram(text, fileName);
   walkJavaScript(program, (node, parent) => (node === program ? true : visit(node, parent)));
 }
 
@@ -242,7 +242,7 @@ const FUNCTION_TYPES = new Set(["FunctionDeclaration", "FunctionExpression", "Ar
  * used by release materialization. Function bodies intentionally leave an
  * enclosing try boundary because they execute later. */
 export function readJsnodeRuntimeModuleRequests(text, fileName) {
-  const program = admittedProgram(text, fileName);
+  const program = validatedProgram(text, fileName);
   const requests = [];
   const visit = (node, guarded) => {
     if ((node.type === "ImportDeclaration" || node.type === "ExportNamedDeclaration" || node.type === "ExportAllDeclaration") && node.source) {
@@ -270,7 +270,7 @@ export function readJsnodeRuntimeModuleRequests(text, fileName) {
  * treating a re-export whose dependency was not read as a complete surface.
  * The parser owns the reading; this admits the source and projects it. */
 export function readJsnodeModuleExports(text, fileName = "module.mjs") {
-  return readJavaScriptModuleExportNames(admittedProgram(text, fileName));
+  return readJavaScriptModuleExportNames(validatedProgram(text, fileName));
 }
 
 function freezePlan(plan) {
@@ -363,7 +363,7 @@ function localTarget(specifier, fileName, fileTargets) {
 
 
 function collapseRequests(text, fileName) {
-  const program = admittedProgram(text, fileName);
+  const program = validatedProgram(text, fileName);
   const requests = [...readJsnodeModuleRequests(text, fileName)].filter((request) => request.specifier !== null && request.start !== null && request.end !== null);
   walkJavaScript(program, (node) => {
     if (node.type === "NewExpression" && node.callee.type === "Identifier" && node.callee.name === "URL" && node.arguments.length >= 2) {

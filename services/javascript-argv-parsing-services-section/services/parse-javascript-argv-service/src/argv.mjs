@@ -1,6 +1,13 @@
 import { parseArgs } from "node:util";
 import { readFlagValue, readRequiredFlagValue, readRepeatedFlagValues } from "@red-cup-engineering/computer-text-content-engineering-services-section/read-flag-token-values";
 
+export const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
+
+export function argValue(flag) {
+  const index = process.argv.indexOf(flag);
+  return index === -1 ? undefined : process.argv[index + 1];
+}
+
 export const javascriptArgumentVectorSchema = Object.freeze({
   type: "object", additionalProperties: false,
   required: ["type", "version", "arguments"],

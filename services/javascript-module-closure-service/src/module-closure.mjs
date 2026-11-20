@@ -164,6 +164,9 @@ function resolveSpecifier(specifier, from, includeInstalled = false, sourceMode,
     if (isBuiltin(target)) return { builtin: `node:${target}` };
     return resolveSpecifier(target, join(root, "package.json"), includeInstalled, sourceMode, sourcePackages);
   }
+  if (!includeInstalled && sourcePackages === undefined && PACKAGE_NAME.test(specifier)) {
+    return digestBareTarget(specifier, from);
+  }
   const parts = specifier.split("/");
   const name = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
   // A package may import itself by its own name.
@@ -350,7 +353,21 @@ const NODE_RESOLVES_FROM_PARENT = [...process.execArgv, ...(process.env.NODE_OPT
 
 function nodeResolved(specifier, from) {
   let url;
-  try { url = import.meta.resolve(specifier, pathToFileURL(from).href); }
+  try {
+    const parentURL = pathToFileURL(from).href;
+    if (NODE_RESOLVES_FROM_PARENT) url = import.meta.resolve(specifier, parentURL);
+    else {
+      // With the unflagged Node API, resolve this single synchronous request
+      // from its importer through the existing chain with ESM import conditions.
+      // The scoped hook never loads a module or remains installed after the read.
+      const hook = registerHooks({ resolve(request, context, next) {
+        if (request === specifier && context.parentURL === import.meta.url) return next(request, { ...context, parentURL });
+        return next(request, context);
+      } });
+      try { url = import.meta.resolve(specifier); }
+      finally { hook.deregister(); }
+    }
+  }
   catch { return { external: `unresolved:${specifier}` }; }
   if (url.startsWith("node:")) return { builtin: url };
   return url.startsWith("file:") ? { file: fileURLToPath(url) } : { external: `unresolved:${specifier}` };
@@ -370,6 +387,23 @@ function importsOf(file, text, strict = false) {
     }
   });
   return specifiers;
+}
+
+// Use the same parent-aware ESM resolution as programme capture for bare imports.
+function digestBareTarget(specifier, from) {
+  const target = nodeResolved(specifier, from);
+  if (!target.file) return target;
+  if (!existsSync(target.file)) return { external: `unresolved:${specifier}` };
+  const file = realpathSync(target.file);
+  const parts = file.split(sep);
+  const boundary = parts.lastIndexOf("node_modules");
+  if (boundary < 0) return { file };
+  // An ESM/CJS format marker below a package root can have its own nameless
+  // package.json. The released package owns the cache boundary and edition.
+  const packageIndex = boundary + (parts[boundary + 1].startsWith("@") ? 2 : 1);
+  const manifestFile = join(parts.slice(0, packageIndex + 1).join(sep), "package.json");
+  const manifest = existsSync(manifestFile) ? JSON.parse(readFileSync(manifestFile, "utf8")) : {};
+  return { external: `${manifest.name}@${manifest.version}` };
 }
 
 /**

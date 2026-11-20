@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from "node:path";
 
-import { validateJavascriptNodeCommandExecutionRequest } from "@red-cup-engineering/admit-javascript-node-command-execution-request-service";
+import { admitJavascriptNodeCommandExecutionRequest } from "@red-cup-engineering/admit-javascript-node-command-execution-request-service";
 
 const absolutePaths = (value) => Array.isArray(value) && value.every((entry) => typeof entry === "string" && path.isAbsolute(entry) && path.resolve(entry) === entry);
 
@@ -29,8 +29,8 @@ export function isolateJavascriptNodeCommandExecutionRequest(isolation) {
     || !absolutePaths(isolation.readable)
     || !absolutePaths(isolation.writable)
   ) throw new TypeError("isolation must be an exact JavascriptNodeCommandIsolationRequest@1");
-  const request = validateJavascriptNodeCommandExecutionRequest(isolation.request);
-  return validateJavascriptNodeCommandExecutionRequest({
+  const request = admitJavascriptNodeCommandExecutionRequest(isolation.request);
+  return admitJavascriptNodeCommandExecutionRequest({
     type: "JavascriptNodeCommandExecutionRequest",
     version: 1,
     command: "bwrap",

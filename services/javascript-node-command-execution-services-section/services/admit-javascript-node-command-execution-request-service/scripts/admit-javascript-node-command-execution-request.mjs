@@ -9,7 +9,7 @@ import operationOutputSchema from "../data/records/admit-javascript-node-command
  * @param {object} request A candidate JavascriptNodeCommandExecutionRequest.
  * @returns {object} The same request, admitted.
  */
-export function validateJavascriptNodeCommandExecutionRequest(request) {
+export function admitJavascriptNodeCommandExecutionRequest(request) {
   if (
     request === null
     || typeof request !== "object"
@@ -39,6 +39,6 @@ export function validateJavascriptNodeCommandExecutionRequest(request) {
 
 if (import.meta.main) {
   const { runJavascriptNodeOperation } = await import("@red-cup-engineering/node-js-function-engineering-services-section/operation");
-  const result = await runJavascriptNodeOperation({ name: "admit-javascript-node-command-execution-request", description: "Admits a candidate as an exact JavascriptNodeCommandExecutionRequest@1, unchanged.", operation: validateJavascriptNodeCommandExecutionRequest, inputSchema: operationInputSchema, outputSchema: operationOutputSchema }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });
+  const result = await runJavascriptNodeOperation({ name: "admit-javascript-node-command-execution-request", description: "Admits a candidate as an exact JavascriptNodeCommandExecutionRequest@1, unchanged.", operation: admitJavascriptNodeCommandExecutionRequest, inputSchema: operationInputSchema, outputSchema: operationOutputSchema }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });
   process.exitCode = result.exitCode;
 }

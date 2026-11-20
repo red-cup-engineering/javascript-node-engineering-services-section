@@ -1,9 +1,9 @@
 #!/usr/bin/env node
-import { validateJavascriptNodeCommandExecutionRequest } from "@red-cup-engineering/admit-javascript-node-command-execution-request-service";
+import { admitJavascriptNodeCommandExecutionRequest } from "@red-cup-engineering/admit-javascript-node-command-execution-request-service";
 import { freezeJson } from "@red-cup-engineering/json-engine";
 import { runJavascriptNodeOperation } from "@red-cup-engineering/node-js-function-engineering-services-section/operation";
 
-function validateExecutionResult(result) {
+function admitExecutionResult(result) {
   if (
     result === null
     || typeof result !== "object"
@@ -26,7 +26,7 @@ function validateExecutionResult(result) {
  * @param {object} projection An exact JavascriptNodeCommandExecutionReceiptProjectionRequest@1.
  * @returns {object} An immutable JavascriptNodeCommandExecutionReceipt@1.
  */
-export function projectJavascriptNodeCommandExecutionRecord(projection) {
+export function projectJavascriptNodeCommandExecutionReceipt(projection) {
   if (
     projection === null
     || typeof projection !== "object"
@@ -35,8 +35,8 @@ export function projectJavascriptNodeCommandExecutionRecord(projection) {
     || projection.type !== "JavascriptNodeCommandExecutionReceiptProjectionRequest"
     || projection.version !== 1
   ) throw new TypeError("projection must be an exact JavascriptNodeCommandExecutionReceiptProjectionRequest@1");
-  const request = validateJavascriptNodeCommandExecutionRequest(projection.request);
-  const result = validateExecutionResult(projection.result);
+  const request = admitJavascriptNodeCommandExecutionRequest(projection.request);
+  const result = admitExecutionResult(projection.result);
   return freezeJson({
     type: "JavascriptNodeCommandExecutionReceipt",
     version: 1,
@@ -46,6 +46,6 @@ export function projectJavascriptNodeCommandExecutionRecord(projection) {
 }
 
 if (import.meta.main) {
-  const result = await runJavascriptNodeOperation({ name: "project-javascript-node-command-execution-receipt", description: "Projects the exact execution request and child-process result boundary to an immutable receipt.", operation: projectJavascriptNodeCommandExecutionRecord }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });
+  const result = await runJavascriptNodeOperation({ name: "project-javascript-node-command-execution-receipt", description: "Projects the exact execution request and child-process result boundary to an immutable receipt.", operation: projectJavascriptNodeCommandExecutionReceipt }, { arguments: process.argv.slice(2), standardInput: process.stdin, standardOutput: process.stdout });
   process.exitCode = result.exitCode;
 }

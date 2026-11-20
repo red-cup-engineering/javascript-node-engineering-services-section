@@ -1,12 +1,15 @@
 {
   "name": "@red-cup-engineering/parse-javascript-argv-service",
-  "version": "0.3.1-dev.0",
+  "version": "0.3.1",
   "description": "Read a JavaScript-host argument vector: named, required and repeated flag values, and schema-bound option parsing.",
   "type": "module",
   "license": "MIT",
   "files": [
-    "src"
+    "src",
+    "test"
   ],
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "receivingTests": ["test/argv.test.mjs"],
   "exports": {
     ".": "./src/argv.mjs",
     "./package.json": "./package.json"

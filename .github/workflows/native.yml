@@ -43,3 +43,17 @@ jobs:
           package=node_modules/@red-cup-engineering/javascript-node-engineering-services-section
           cp "$package/examples/quickstart.test.mjs" quickstart.test.mjs
           node --test ./quickstart.test.mjs
+      - name: Receive the installed argument parser and its original notices
+        run: |
+          service=services/javascript-argv-parsing-services-section/services/parse-javascript-argv-service
+          consumer=$(mktemp -d)
+          trap 'rm -rf "$consumer"' EXIT
+          archive=$(cd "$service" && npm pack --silent --ignore-scripts --pack-destination "$consumer")
+          cp .npmrc "$consumer/.npmrc"
+          cd "$consumer"
+          echo '{"private":true,"type":"module"}' > package.json
+          npm install --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org "./$archive"
+          package=node_modules/@red-cup-engineering/parse-javascript-argv-service
+          cmp "$GITHUB_WORKSPACE/$service/LICENSE" "$package/LICENSE"
+          cmp "$GITHUB_WORKSPACE/$service/README.md" "$package/README.md"
+          (cd "$package" && npm test)

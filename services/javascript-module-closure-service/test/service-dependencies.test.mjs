@@ -1,5 +1,7 @@
+import { sha256 } from "@red-cup-engineering/cryptographic-computer-data-engineering-services-section/hash";
+import { sha256Hex } from "@red-cup-engineering/cryptographic-computer-data-engineering-services-section/integrity";
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -22,7 +24,7 @@ test('a captured score rule retains its bytes when the source and cache key chan
   const captured = captureModuleClosure(entry);
   const { digest, modules } = moduleClosureDigest([entry]);
   assert.equal(modules, 2);
-  const hash = createHash('sha256').update(moduleClosureBytes(captured.id)).digest('base64url');
+  const hash = sha256(moduleClosureBytes(captured.id)).toString("base64url");
   assert.equal(captured.id, 'ni:///sha-256;' + hash);
   assert.equal(admitModuleClosure(captured.id, captured.body), captured.id);
   const programme = javascriptProgram(entry, 'score');
@@ -48,7 +50,7 @@ test('bound configuration reads verified JSON, resolves pointers and checks para
   function reference(file, record) {
     const bytes = JSON.stringify(record);
     writeFileSync(join(pack, file + '.json'), bytes);
-    return {module: name + '/' + file, record: record.id, sha256: createHash('sha256').update(bytes).digest('hex')};
+    return {module: name + '/' + file, record: record.id, sha256: sha256Hex(bytes)};
   }
   const model = reference('model', {id: 'difficulty-model', schema: {type: 'integer', minimum: 1}});
   const descriptor = {

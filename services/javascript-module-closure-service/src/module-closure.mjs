@@ -1,3 +1,5 @@
+import { sha256 } from "@red-cup-engineering/cryptographic-computer-data-engineering-services-section/hash";
+import { sha256Hex } from "@red-cup-engineering/cryptographic-computer-data-engineering-services-section/integrity";
 import { parseJsonValue } from "@red-cup-engineering/json-engine/parse-json-value";
 import { resolveJsonPointer } from "@red-cup-engineering/json-engine/resolve-json-pointer";
 import { validateJsonSchema } from "@red-cup-engineering/json-schema-engineering-services-section/validation";
@@ -419,7 +421,7 @@ export function moduleClosureDigest(entries) {
     if (modules.has(file)) continue;
     const bytes = readFileSync(file);
     const { root, manifest } = packageOf(file);
-    modules.set(file, `${manifest.name ?? relative(dirname(root), root)}/${relative(root, file).split(sep).join("/")}\0${createHash("sha256").update(bytes).digest("hex")}`);
+    modules.set(file, `${manifest.name ?? relative(dirname(root), root)}/${relative(root, file).split(sep).join("/")}\0${sha256Hex(bytes)}`);
     for (const specifier of importsOf(file, bytes.toString("utf8"))) {
       const resolved = resolveSpecifier(specifier, file);
       if (resolved?.external) external.add(resolved.external);
@@ -439,7 +441,7 @@ const programmeStateKey = Symbol.for("561.javascript.programme.loader.v1");
 const programmeState = globalThis[programmeStateKey] ??= { closures: new Map(), moduleUrls: new Map(), hook: null };
 const programmeParameter = "__561_programme";
 const moduleParameter = "__561_module";
-const byteAddress = (bytes) => `ni:///sha-256;${createHash("sha256").update(bytes).digest("base64url")}`;
+const byteAddress = (bytes) => `ni:///sha-256;${sha256(bytes).toString("base64url")}`;
 const freezeProgramme = (value) => {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     for (const child of Object.values(value)) freezeProgramme(child);
@@ -678,7 +680,7 @@ export async function readModuleParameterizations(sources, {
         throw new TypeError("DataRef requires at most one MiB of exact JSON source bytes");
       sourceBytes += bytes.byteLength;
       if (sourceBytes > 8 * 1024 * 1024) throw new RangeError("Module parameterization source exceeds eight MiB");
-      if (createHash("sha256").update(bytes).digest("hex") !== reference.sha256)
+      if (sha256Hex(bytes) !== reference.sha256)
         throw new TypeError("DataRef source digest differs");
       return freezeModuleParameterData(parseJsonValue(new TextDecoder("utf-8", { fatal: true }).decode(bytes)));
     })());

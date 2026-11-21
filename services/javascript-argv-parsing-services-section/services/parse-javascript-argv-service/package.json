@@ -1,6 +1,6 @@
 {
   "name": "@red-cup-engineering/parse-javascript-argv-service",
-  "version": "0.3.1",
+  "version": "0.3.2-dev.0",
   "description": "Read a JavaScript-host argument vector: named, required and repeated flag values, and schema-bound option parsing.",
   "type": "module",
   "license": "MIT",
@@ -27,7 +27,7 @@
     "node": ">=24.2.0"
   },
   "dependencies": {
-    "@red-cup-engineering/computer-text-content-engineering-services-section": "^0.1.4"
+    "@red-cup-engineering/computer-text-content-engineering-services-section": "^0.1.4 || 0.1.6-dev.1"
   },
   "private": false
 }

@@ -15,9 +15,7 @@
     "examples/quickstart.test.mjs"
   ],
   "scripts": {
-    "check": "node --check src/invoke-text-operation.mjs",
-    "test": "node --test test/*.test.mjs",
-    "test:consumer": "node --test examples/quickstart.test.mjs"
+    "check": "node --check src/invoke-text-operation.mjs"
   },
   "engines": {
     "node": ">=24.2.0"

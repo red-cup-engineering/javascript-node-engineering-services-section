@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "basis": "Node.js Runtime text-tier invocation. Callers address operations by qualified domain and name. The shared Code interpreter handles a registered operation's typed request.",
+  "cases": [
+    {
+      "id": "NODE-RUNTIME-NAMESPACE",
+      "role": "source",
+      "kind": "refusal",
+      "claim": "A bare operation name is refused at the text-tier boundary.",
+      "file": "test/invoke-text-operation.test.mjs",
+      "test": "refuses an unnamespaced operationId before it ever reaches content-engine dispatch"
+    },
+    {
+      "id": "NODE-RUNTIME-DISPATCH",
+      "role": "source",
+      "kind": "invariant",
+      "claim": "The text tier can dispatch operations in two domains by their qualified names.",
+      "file": "test/invoke-text-operation.test.mjs",
+      "test": "namespaces two domains without collision and dispatches by qualified id"
+    },
+    {
+      "id": "NODE-RUNTIME-QUICKSTART",
+      "role": "consumer",
+      "kind": "example",
+      "claim": "An installed consumer invokes a named text operation and receives its typed result.",
+      "file": "examples/quickstart.test.mjs"
+    }
+  ]
+}

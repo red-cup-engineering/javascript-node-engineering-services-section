@@ -1,0 +1,33 @@
+{
+  "name": "@red-cup-engineering/parse-javascript-argv-service",
+  "version": "0.3.2-dev.0",
+  "description": "Read a JavaScript-host argument vector: named, required and repeated flag values, and schema-bound option parsing.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "src",
+    "test"
+  ],
+  "scripts": { "test": "node --test test/*.test.mjs" },
+  "receivingTests": ["test/argv.test.mjs"],
+  "exports": {
+    ".": "./src/argv.mjs",
+    "./package.json": "./package.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/javascript-node-engineering-services-section.git",
+    "directory": "services/javascript-argv-parsing-services-section/services/parse-javascript-argv-service"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
+  },
+  "engines": {
+    "node": ">=24.2.0"
+  },
+  "dependencies": {
+    "@red-cup-engineering/computer-text-content-engineering-services-section": "^0.1.4 || 0.1.6-dev.1"
+  },
+  "private": false
+}

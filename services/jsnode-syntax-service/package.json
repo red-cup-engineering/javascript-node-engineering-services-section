@@ -1,0 +1,36 @@
+{
+  "name": "@red-cup-engineering/jsnode-syntax-service",
+  "version": "0.1.2-dev.0",
+  "description": "Read JavaScript source for Node as admitted syntax: tokens, module requests and exports, operation arguments, and exact codemod plans with receipts.",
+  "type": "module",
+  "license": "MIT",
+  "files": [
+    "src"
+  ],
+  "exports": {
+    ".": "./src/syntax.mjs",
+    "./package.json": "./package.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/red-cup-engineering/javascript-node-engineering-services-section.git",
+    "directory": "services/jsnode-syntax-service"
+  },
+  "funding": {
+    "type": "individual",
+    "url": "https://github.com/561-group/.github/blob/main/TIPS.md"
+  },
+  "engines": {
+    "node": ">=24.2.0"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "@red-cup-engineering/computer-code-engineering-services-section": "^0.2.3",
+    "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "^0.3.6",
+    "@red-cup-engineering/javascript-parser-service": "^0.2.0",
+    "@red-cup-engineering/jsdoc-engine": "^0.1.0"
+  },
+  "private": false
+}

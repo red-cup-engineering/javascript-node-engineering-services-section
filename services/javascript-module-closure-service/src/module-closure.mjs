@@ -1,5 +1,4 @@
-import { sha256 } from "@red-cup-engineering/cryptographic-computer-data-engineering-services-section/hash";
-import { sha256Hex } from "@red-cup-engineering/cryptographic-computer-data-engineering-services-section/integrity";
+import { makeNiUri, sha256Hex } from "@red-cup-engineering/semiotic-content-address-system";
 import { parseJsonValue } from "@red-cup-engineering/json-engine/parse-json-value";
 import { resolveJsonPointer } from "@red-cup-engineering/json-engine/resolve-json-pointer";
 import { validateJsonSchema } from "@red-cup-engineering/json-schema-engineering-services-section/validation";
@@ -13,7 +12,6 @@ import moduleParameterizationSchema from "@red-cup-engineering/computer-content-
  * moving the same code to a new directory, and is invalidated by any change to code it reaches.
  * Static imports, re-exports and literal dynamic imports are followed; a computed `import()` is not.
  */
-import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { isBuiltin, findPackageJSON, registerHooks, createRequire } from "node:module";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -428,10 +426,8 @@ export function moduleClosureDigest(entries) {
       else if (resolved?.file) pending.push(realpathSync(resolved.file));
     }
   }
-  const hash = createHash("sha256");
-  for (const line of [...modules.values()].sort()) hash.update(`${line}\n`);
-  for (const name of [...external].sort()) hash.update(`${name}\n`);
-  return { digest: hash.digest("hex"), modules: modules.size, external: [...external].sort() };
+  const framed = [...[...modules.values()].sort(), ...[...external].sort()].map(line => `${line}\n`).join("");
+  return { digest: sha256Hex(framed), modules: modules.size, external: [...external].sort() };
 }
 
 // Unlike the cache digest above, a programme closure carries every reached byte,
@@ -441,7 +437,6 @@ const programmeStateKey = Symbol.for("561.javascript.programme.loader.v1");
 const programmeState = globalThis[programmeStateKey] ??= { closures: new Map(), moduleUrls: new Map(), hook: null };
 const programmeParameter = "__561_programme";
 const moduleParameter = "__561_module";
-const byteAddress = (bytes) => `ni:///sha-256;${sha256(bytes).toString("base64url")}`;
 const freezeProgramme = (value) => {
   if (value && typeof value === "object" && !Object.isFrozen(value)) {
     for (const child of Object.values(value)) freezeProgramme(child);
@@ -500,7 +495,7 @@ function installProgrammeLoader() {
       if (!selected) return next(url, context);
       const module = selected.admitted.body.modules[selected.key];
       const source = Buffer.from(module.source, "base64");
-      if (byteAddress(source) !== module.content) throw new TypeError("JavaScript programme source address mismatch");
+      if (makeNiUri(source) !== module.content) throw new TypeError("JavaScript programme source address mismatch");
       return { format: module.format, source, shortCircuit: true };
     },
   });
@@ -528,7 +523,7 @@ export function captureModuleClosure(entry, { resolve: resolveImport = javascrip
   }
   while (pending.length) {
     const file = pending.pop(), key = keyOf(file);
-    const bytes = readFileSync(file), content = byteAddress(bytes);
+    const bytes = readFileSync(file), content = makeNiUri(bytes);
     if (Object.hasOwn(modules, key)) {
       if (modules[key].content !== content) throw new TypeError(`Different JavaScript sources share package coordinate ${key}`);
       continue;
@@ -557,7 +552,7 @@ export function captureModuleClosure(entry, { resolve: resolveImport = javascrip
   // Convert the null-prototype capture maps to the ordinary JSON carrier.
   // The receiver performs canonical admission and retains the programme graph.
   const body = JSON.parse(JSON.stringify({ kind: "javascript.module-closure.v1", entry: keyOf(start), modules }));
-  const id = byteAddress(Buffer.from(canonicalJson(body)));
+  const id = makeNiUri(Buffer.from(canonicalJson(body)));
   admitModuleClosure(id, body, origins);
   return Object.freeze({ id, body: moduleClosureMaterial(id) });
 }
@@ -565,12 +560,12 @@ export function captureModuleClosure(entry, { resolve: resolveImport = javascrip
 /** Admit transported source material. Host origin paths are bindings, never code identity. */
 export function admitModuleClosure(id, material, originBindings = {}) {
   const body = freezeProgramme(JSON.parse(canonicalJson(material)));
-  if (byteAddress(Buffer.from(canonicalJson(body))) !== id || body.kind !== "javascript.module-closure.v1"
+  if (makeNiUri(Buffer.from(canonicalJson(body))) !== id || body.kind !== "javascript.module-closure.v1"
     || !Object.hasOwn(body.modules ?? {}, body.entry)) throw new TypeError("JavaScript programme closure address mismatch");
   const origins = Object.create(null);
   for (const [key, module] of Object.entries(body.modules)) {
     if (!key || key.startsWith("/") || key.split("/").some(segment => segment === "." || segment === ".." || segment === "")) throw new TypeError("Invalid JavaScript programme package coordinate");
-    if (!["module", "commonjs", "json"].includes(module.format) || byteAddress(Buffer.from(module.source, "base64")) !== module.content)
+    if (!["module", "commonjs", "json"].includes(module.format) || makeNiUri(Buffer.from(module.source, "base64")) !== module.content)
       throw new TypeError("JavaScript programme source address mismatch");
     for (const target of Object.values(module.imports)) {
       if (!Object.hasOwn(body.modules, target) && !(target.startsWith("node:") && isBuiltin(target)))
@@ -608,7 +603,7 @@ export async function executeJavascriptProgram(programme, input, arguments_, con
 /** Exact canonical bytes for native NI publication. */
 export function moduleClosureBytes(id) {
   const bytes = Buffer.from(canonicalJson(moduleClosureMaterial(id)));
-  if (byteAddress(bytes) !== id) throw new TypeError("JavaScript programme closure address mismatch");
+  if (makeNiUri(bytes) !== id) throw new TypeError("JavaScript programme closure address mismatch");
   return bytes;
 }
 

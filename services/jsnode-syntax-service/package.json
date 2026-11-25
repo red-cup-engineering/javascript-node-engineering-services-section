@@ -30,7 +30,8 @@
     "@red-cup-engineering/computer-code-engineering-services-section": "^0.2.3",
     "@red-cup-engineering/cryptographic-computer-data-engineering-services-section": "^0.3.6",
     "@red-cup-engineering/javascript-parser-service": "^0.2.0",
-    "@red-cup-engineering/jsdoc-engine": "^0.1.0"
+    "@red-cup-engineering/jsdoc-engine": "^0.1.0",
+    "@red-cup-engineering/semiotic-content-address-system": "0.1.9"
   },
   "private": false
 }

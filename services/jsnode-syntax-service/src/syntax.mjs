@@ -1,10 +1,10 @@
+import { sha256Digest } from "@red-cup-engineering/semiotic-content-address-system";
 import { readJavascriptFileExportDocumentation } from "@red-cup-engineering/jsdoc-engine";
 import { posix as path } from "node:path";
 import { lineColumnOf, parseJavaScript, walkJavaScript } from "@red-cup-engineering/javascript-parser-service";
 import { readJavaScriptModuleExportNames } from "@red-cup-engineering/javascript-parser-service/module-export-names";
 import { readJavaScriptModuleRequestSites } from "@red-cup-engineering/javascript-parser-service/module-reference-sites";
 import { applyExactSourceEdits } from "@red-cup-engineering/computer-code-engineering-services-section/exact-source-edits";
-import { sha256Digest, sha256Hex } from "@red-cup-engineering/cryptographic-computer-data-engineering-services-section/integrity";
 
 const OPERATION_SOURCE_PATH = /^(?:src|scripts)\/[a-z][a-z0-9-]*\.mjs$/u;
 

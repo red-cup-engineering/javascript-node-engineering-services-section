@@ -1,4 +1,4 @@
-# JavaScript Node Operations Graph services section
+# Javascript node operations graph engineering services section
 
 This package is the home of the Node Operations Graph (NOG): a graph whose
 nodes are npm-provided binaries, whose edges are typed operational relations,

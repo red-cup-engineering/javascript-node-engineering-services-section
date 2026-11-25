@@ -1,5 +1,5 @@
 [submodule "services/javascript-node-command-execution-services-section/services/execute-javascript-node-command-service"]
-	path = services/javascript-node-command-execution-services-section/services/execute-javascript-node-command-service
+	path = services/javascript-node-command-execution-engineering-services-section/services/execute-javascript-node-command-service
 	url = https://github.com/red-cup-engineering/execute-javascript-node-command-service.git
 	branch = main
 [submodule "services/node-runtime-authority-engineering-services-section"]
